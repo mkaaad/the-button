@@ -1,6 +1,7 @@
 package service
 
 import (
+	"button/connx"
 	"button/dao"
 	"context"
 	"encoding/json"
@@ -35,7 +36,7 @@ type ButtonPress struct {
 	Timestamp int64 `json:"timestamp"`
 }
 
-func GetLeaderboard(conn *websocket.Conn) error {
+func GetLeaderboard(conn *connx.SafeConn) error {
 	rank, err := dao.Rdb.ZRevRangeWithScores(context.Background(), rankKey, 0, -1).Result()
 	if err != nil {
 		return err
@@ -69,7 +70,7 @@ func PressButton(userID int64, messageChan chan []byte) error {
 	// Calculate time since last press
 	now := time.Now().UnixMilli()
 	mu.Lock()
-	sroce := now - startTime
+	score := now - startTime
 	startTime = now
 	mu.Unlock()
 	// Update leaderboard
@@ -83,7 +84,7 @@ func PressButton(userID int64, messageChan chan []byte) error {
 	end
 	return true
 	`)
-	_, err := luaScript.Run(context.Background(), dao.Rdb, []string{rankKey}, userID, sroce).Result()
+	_, err := luaScript.Run(context.Background(), dao.Rdb, []string{rankKey}, userID, score).Result()
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func PressButton(userID int64, messageChan chan []byte) error {
 	return nil
 }
 
-func GetTime(conn *websocket.Conn) error {
+func GetTime(conn *connx.SafeConn) error {
 	mu.RLock()
 	msg := message{
 		Type: "time",

@@ -1,13 +1,12 @@
 package router
 
 import (
+	"button/connx"
 	"button/service"
 	"errors"
-
-	"github.com/gorilla/websocket"
 )
 
-func HandleMessage(conn *websocket.Conn, msg []byte, userID int64, message chan []byte) error {
+func HandleMessage(conn *connx.SafeConn, msg []byte, userID int64, message chan []byte) error {
 	switch string(msg) {
 	case "leaderboard":
 		return service.GetLeaderboard(conn)
