@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	broadcast = make(chan []byte, 100) // Broadcast channel
+	broadcast = make(chan []byte, 2000) // Broadcast channel
 )
 
 // Upgrader is used to upgrade HTTP connections to WebSocket connections.
@@ -25,21 +25,21 @@ var upgrader = websocket.Upgrader{
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
 	userID := c.GetInt64("user_id")
-	unsafeConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	conn := connx.NewSafeConn(unsafeConn)
+	client := connx.NewClient(conn)
 	// Register new client
-	connx.ConnPool.Add(conn)
+	connx.ConnPool.Add(client)
 	// Ensure connection is closed on function exit
 	defer func() {
-		connx.ConnPool.Del(conn)
+		connx.ConnPool.Del(client)
 	}()
 
 	for {
 		// Read message from browser
-		messageType, message, err := conn.ReadMessage()
+		messageType, message, err := client.Conn.ReadMessage()
 		if err != nil {
 			break
 		}
@@ -47,7 +47,7 @@ func WebSocketHandler(c *gin.Context) {
 			continue // Ignore non-text messages
 		}
 		// Handle the message
-		err = router.HandleMessage(conn, message, userID, broadcast)
+		err = router.HandleMessage(message, userID, client.Send, broadcast)
 		if err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("wrong message format"))
 			log.Println("Error handling message:", err)
@@ -55,16 +55,14 @@ func WebSocketHandler(c *gin.Context) {
 	}
 }
 func BroadCastMessage() {
-	for {
-		message := <-broadcast
+	for msg := range broadcast {
 		conns := connx.ConnPool.GetAllConn()
-		for _, conn := range conns {
-			go func(c *connx.SafeConn) {
-				err := c.WriteMessage(websocket.TextMessage, message)
-				if err != nil {
-					go connx.ConnPool.Del(c)
-				}
-			}(conn)
+		for _, c := range conns {
+			select {
+			case c.Send <- msg:
+			default:
+				go connx.ConnPool.Del(c)
+			}
 		}
 	}
 }

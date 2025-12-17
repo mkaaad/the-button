@@ -1,7 +1,6 @@
 package service
 
 import (
-	"button/connx"
 	"button/dao"
 	"context"
 	"encoding/json"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/gorilla/websocket"
 )
 
 var (
@@ -36,7 +34,18 @@ type ButtonPress struct {
 	Timestamp int64 `json:"timestamp"`
 }
 
-func GetLeaderboard(conn *connx.SafeConn) error {
+var luaScript = redis.NewScript(`
+	local rankKey = KEYS[1]
+	local userID = ARGV[1]
+	local score = tonumber(ARGV[2])
+	local currentScore = redis.call("ZSCORE", rankKey, userID)
+	if currentScore == false or score < tonumber(currentScore) then
+		redis.call("ZADD", rankKey, score, userID)
+	end
+	return true
+	`)
+
+func GetLeaderboard(send chan []byte) error {
 	rank, err := dao.Rdb.ZRevRangeWithScores(context.Background(), rankKey, 0, -1).Result()
 	if err != nil {
 		return err
@@ -63,31 +72,17 @@ func GetLeaderboard(conn *connx.SafeConn) error {
 	if err != nil {
 		return err
 	}
-	return conn.WriteMessage(websocket.TextMessage, data)
-
+	send <- data
+	return nil
 }
-func PressButton(userID int64, messageChan chan []byte) error {
+func PressButton(userID int64, broadcast chan []byte) error {
 	// Calculate time since last press
 	now := time.Now().UnixMilli()
+	var score int64
 	mu.Lock()
-	score := now - startTime
+	score = now - startTime
 	startTime = now
 	mu.Unlock()
-	// Update leaderboard
-	luaScript := redis.NewScript(`
-	local rankKey = KEYS[1]
-	local userID = ARGV[1]
-	local score = tonumber(ARGV[2])
-	local currentScore = redis.call("ZSCORE", rankKey, userID)
-	if currentScore == false or score < tonumber(currentScore) then
-		redis.call("ZADD", rankKey, score, userID)
-	end
-	return true
-	`)
-	_, err := luaScript.Run(context.Background(), dao.Rdb, []string{rankKey}, userID, score).Result()
-	if err != nil {
-		return err
-	}
 	// Send button press message
 	b := ButtonPress{
 		UserID:    userID,
@@ -101,11 +96,17 @@ func PressButton(userID int64, messageChan chan []byte) error {
 	if err != nil {
 		return err
 	}
-	messageChan <- data
+	broadcast <- data
+	// Update leaderboard
+	_, err = luaScript.Run(context.Background(), dao.Rdb, []string{rankKey}, userID, score).Result()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func GetTime(conn *connx.SafeConn) error {
+func GetTime(send chan []byte) error {
 	mu.RLock()
 	msg := message{
 		Type: "time",
@@ -116,5 +117,6 @@ func GetTime(conn *connx.SafeConn) error {
 	if err != nil {
 		return err
 	}
-	return conn.WriteMessage(websocket.TextMessage, data)
+	send <- data
+	return nil
 }

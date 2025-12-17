@@ -1,19 +1,18 @@
 package router
 
 import (
-	"button/connx"
 	"button/service"
 	"errors"
 )
 
-func HandleMessage(conn *connx.SafeConn, msg []byte, userID int64, message chan []byte) error {
+func HandleMessage(msg []byte, userID int64, send chan []byte, broadcast chan []byte) error {
 	switch string(msg) {
 	case "leaderboard":
-		return service.GetLeaderboard(conn)
+		return service.GetLeaderboard(send)
 	case "button":
-		return service.PressButton(userID, message)
+		return service.PressButton(userID, broadcast)
 	case "time":
-		return service.GetTime(conn)
+		return service.GetTime(send)
 	default:
 		return errors.New("parse msg error")
 	}

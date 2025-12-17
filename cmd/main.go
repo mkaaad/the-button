@@ -10,7 +10,8 @@ import (
 func main() {
 	dao.InitRedis()
 	go api.BroadCastMessage()
-	r := gin.Default()
-	r.GET("/", api.WebSocketHandler)
-	r.Run()
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.GET("/ws", api.WebSocketHandler)
+	r.Run("127.0.0.1:8080")
 }

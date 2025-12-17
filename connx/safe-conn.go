@@ -1,34 +1,27 @@
 package connx
 
 import (
-	"sync"
-
 	"github.com/gorilla/websocket"
 )
 
-type SafeConn struct {
-	conn    *websocket.Conn
-	readMu  sync.Mutex
-	wirteMu sync.Mutex
+type Client struct {
+	Conn *websocket.Conn
+	Send chan []byte
 }
 
-func (sc *SafeConn) WriteMessage(messageType int, data []byte) error {
-	sc.wirteMu.Lock()
-	defer sc.wirteMu.Unlock()
-	return sc.conn.WriteMessage(messageType, data)
-}
-func (sc *SafeConn) Close() error {
-	return sc.conn.Close()
-}
-func (sc *SafeConn) ReadMessage() (int, []byte, error) {
-	sc.readMu.Lock()
-	defer sc.readMu.Unlock()
-	return sc.conn.ReadMessage()
-}
-func NewSafeConn(conn *websocket.Conn) *SafeConn {
-	return &SafeConn{
-		conn:    conn,
-		readMu:  sync.Mutex{},
-		wirteMu: sync.Mutex{},
+func (c *Client) writeLoop() {
+	for msg := range c.Send {
+		if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			ConnPool.Del(c)
+			return
+		}
 	}
+}
+func NewClient(conn *websocket.Conn) *Client {
+	c := &Client{
+		Conn: conn,
+		Send: make(chan []byte, 128),
+	}
+	go c.writeLoop()
+	return c
 }
