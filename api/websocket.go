@@ -24,7 +24,8 @@ var upgrader = websocket.Upgrader{
 // WebSocketHandler handles WebSocket upgrade requests.
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
-	userName := c.GetString("user_name")
+	//userName := c.GetString("user_name")
+	userName := "mkaaad"
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return

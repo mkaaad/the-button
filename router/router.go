@@ -5,13 +5,19 @@ import (
 	"errors"
 )
 
+const (
+	GET_TIME       = "1"
+	GET_LEADEROARD = "2"
+	PRESS_BUTTON   = "3"
+)
+
 func HandleMessage(msg []byte, userName string, send chan []byte, broadcast chan []byte) error {
 	switch string(msg) {
-	case "leaderboard":
+	case GET_LEADEROARD:
 		return service.GetLeaderboard(send)
-	case "button":
+	case PRESS_BUTTON:
 		return service.PressButton(userName, broadcast)
-	case "time":
+	case GET_TIME:
 		return service.GetTime(send)
 	default:
 		return errors.New("parse msg error")

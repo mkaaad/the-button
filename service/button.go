@@ -17,6 +17,8 @@ var (
 const rankKey = "button_leaderboard"
 const leaderboardLimit = 100
 
+const countdownTime = 60000
+
 type message struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
@@ -30,8 +32,7 @@ type Leaderboard struct {
 	Entries []Rank `json:"entries"`
 }
 type ButtonPress struct {
-	UserName  string `json:"user_name"`
-	Timestamp int64  `json:"timestamp"`
+	UserName string `json:"user_name"`
 }
 type Time struct {
 	Time int64 `json:"time"`
@@ -44,7 +45,7 @@ func GetLeaderboard(send chan []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	rank, err := dao.Rdb.ZRevRangeWithScores(ctx, rankKey, 0, leaderboardLimit-1).Result()
+	rank, err := dao.Rdb.ZRangeWithScores(ctx, rankKey, 0, leaderboardLimit-1).Result()
 	if err != nil {
 		return err
 	}
@@ -81,11 +82,10 @@ func PressButton(userName string, broadcast chan []byte) error {
 	// Calculate time since last press
 	now := time.Now().UnixMilli()
 	prev := startTime.Swap(now)
-	score := now - prev
+	score := countdownTime - (now - prev)
 	// Send button press message
 	b := ButtonPress{
-		UserName:  userName,
-		Timestamp: now,
+		UserName: userName,
 	}
 	data, err := json.Marshal(b)
 	msg := message{
@@ -99,7 +99,7 @@ func PressButton(userName string, broadcast chan []byte) error {
 	broadcast <- data
 	// Update leaderboard
 	_, err = dao.Rdb.ZAddArgs(ctx, rankKey, redis.ZAddArgs{
-		GT: true,
+		LT: true,
 		Members: []redis.Z{{
 			Score:  float64(score),
 			Member: userName,
