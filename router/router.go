@@ -5,12 +5,12 @@ import (
 	"errors"
 )
 
-func HandleMessage(msg []byte, userID int64, send chan []byte, broadcast chan []byte) error {
+func HandleMessage(msg []byte, userName string, send chan []byte, broadcast chan []byte) error {
 	switch string(msg) {
 	case "leaderboard":
 		return service.GetLeaderboard(send)
 	case "button":
-		return service.PressButton(userID, broadcast)
+		return service.PressButton(userName, broadcast)
 	case "time":
 		return service.GetTime(send)
 	default:

@@ -4,49 +4,47 @@ import (
 	"button/dao"
 	"context"
 	"encoding/json"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 )
 
 var (
-	startTime = time.Now().UnixMilli()
-	mu        sync.RWMutex
+	startTime atomic.Int64
 )
 
 const rankKey = "button_leaderboard"
+const leaderboardLimit = 100
 
 type message struct {
-	Type string      `json:"type"`
-	Data interface{} `json:"data"`
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
 }
 type Rank struct {
-	UserID int64 `json:"user_id"`
-	Rank   int   `json:"rank"`
-	Time   int64 `json:"time"`
+	UserName string `json:"user_name"`
+	Rank     int    `json:"rank"`
+	Time     int64  `json:"time"`
 }
 type Leaderboard struct {
 	Entries []Rank `json:"entries"`
 }
 type ButtonPress struct {
-	UserID    int64 `json:"user_id"`
-	Timestamp int64 `json:"timestamp"`
+	UserName  string `json:"user_name"`
+	Timestamp int64  `json:"timestamp"`
+}
+type Time struct {
+	Time int64 `json:"time"`
 }
 
-var luaScript = redis.NewScript(`
-	local rankKey = KEYS[1]
-	local userID = ARGV[1]
-	local score = tonumber(ARGV[2])
-	local currentScore = redis.call("ZSCORE", rankKey, userID)
-	if currentScore == false or score < tonumber(currentScore) then
-		redis.call("ZADD", rankKey, score, userID)
-	end
-	return true
-	`)
-
+func StoreTime() {
+	startTime.Store(time.Now().UnixMilli())
+}
 func GetLeaderboard(send chan []byte) error {
-	rank, err := dao.Rdb.ZRevRangeWithScores(context.Background(), rankKey, 0, -1).Result()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	rank, err := dao.Rdb.ZRevRangeWithScores(ctx, rankKey, 0, leaderboardLimit-1).Result()
 	if err != nil {
 		return err
 	}
@@ -54,51 +52,59 @@ func GetLeaderboard(send chan []byte) error {
 		Entries: make([]Rank, 0, len(rank)),
 	}
 	for i, entry := range rank {
-		userID, ok := entry.Member.(int64)
+		userName, ok := entry.Member.(string)
 		if !ok {
 			continue
 		}
 		leaderboard.Entries = append(leaderboard.Entries, Rank{
-			UserID: userID,
-			Rank:   i + 1,
-			Time:   int64(entry.Score),
+			UserName: userName,
+			Rank:     i + 1,
+			Time:     int64(entry.Score),
 		})
 	}
+	data, err := json.Marshal(leaderboard)
 	msg := message{
 		Type: "leaderboard",
-		Data: leaderboard,
+		Data: data,
 	}
-	data, err := json.Marshal(msg)
+	data, err = json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	send <- data
 	return nil
 }
-func PressButton(userID int64, broadcast chan []byte) error {
+func PressButton(userName string, broadcast chan []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	// Calculate time since last press
 	now := time.Now().UnixMilli()
-	var score int64
-	mu.Lock()
-	score = now - startTime
-	startTime = now
-	mu.Unlock()
+	prev := startTime.Swap(now)
+	score := now - prev
 	// Send button press message
 	b := ButtonPress{
-		UserID:    userID,
+		UserName:  userName,
 		Timestamp: now,
 	}
+	data, err := json.Marshal(b)
 	msg := message{
 		Type: "button_press",
-		Data: b,
+		Data: data,
 	}
-	data, err := json.Marshal(msg)
+	data, err = json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	broadcast <- data
 	// Update leaderboard
-	_, err = luaScript.Run(context.Background(), dao.Rdb, []string{rankKey}, userID, score).Result()
+	_, err = dao.Rdb.ZAddArgs(ctx, rankKey, redis.ZAddArgs{
+		GT: true,
+		Members: []redis.Z{{
+			Score:  float64(score),
+			Member: userName,
+		}},
+	}).Result()
 	if err != nil {
 		return err
 	}
@@ -107,13 +113,15 @@ func PressButton(userID int64, broadcast chan []byte) error {
 }
 
 func GetTime(send chan []byte) error {
-	mu.RLock()
+	t := &Time{
+		Time: startTime.Load(),
+	}
+	data, err := json.Marshal(t)
 	msg := message{
 		Type: "time",
-		Data: startTime,
+		Data: data,
 	}
-	mu.RUnlock()
-	data, err := json.Marshal(msg)
+	data, err = json.Marshal(msg)
 	if err != nil {
 		return err
 	}
