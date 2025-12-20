@@ -2,7 +2,6 @@ package api
 
 import (
 	"button/connx"
-	"button/router"
 	"log"
 	"net/http"
 
@@ -48,7 +47,7 @@ func WebSocketHandler(c *gin.Context) {
 			continue // Ignore non-text messages
 		}
 		// Handle the message
-		err = router.HandleMessage(message, userName, client.Send, broadcast)
+		err = handleMessage(message, userName, client.Send, broadcast)
 		if err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("wrong message format"))
 			log.Println("Error handling message:", err)
