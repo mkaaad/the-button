@@ -23,8 +23,7 @@ var upgrader = websocket.Upgrader{
 // WebSocketHandler handles WebSocket upgrade requests.
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
-	//userName := c.GetString("user_name")
-	userName := "mkaaad"
+	username := c.GetString("username")
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
@@ -47,7 +46,7 @@ func WebSocketHandler(c *gin.Context) {
 			continue // Ignore non-text messages
 		}
 		// Handle the message
-		err = handleMessage(message, userName, client.Send, broadcast)
+		err = handleMessage(message, username, client.Send, broadcast)
 		if err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("wrong message format"))
 			log.Println("Error handling message:", err)

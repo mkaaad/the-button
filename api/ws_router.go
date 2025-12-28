@@ -11,12 +11,12 @@ const (
 	PRESS_BUTTON   = "3"
 )
 
-func handleMessage(msg []byte, userName string, send chan []byte, broadcast chan []byte) error {
+func handleMessage(msg []byte, username string, send chan []byte, broadcast chan []byte) error {
 	switch string(msg) {
 	case GET_LEADEROARD:
 		return service.GetLeaderboard(send)
 	case PRESS_BUTTON:
-		return service.PressButton(userName, broadcast)
+		return service.PressButton(username, broadcast)
 	case GET_TIME:
 		return service.GetTime(send)
 	default:

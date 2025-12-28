@@ -9,6 +9,8 @@ import (
 
 func main() {
 	dao.InitRedis()
+	dao.InitSQLite()
+	service.InitSMSClient()
 	go api.BroadCastMessage()
 	service.StoreTime()
 	router.SetupRoute()

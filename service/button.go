@@ -24,7 +24,7 @@ type message struct {
 	Data json.RawMessage `json:"data"`
 }
 type Rank struct {
-	UserName string `json:"user_name"`
+	Username string `json:"username"`
 	Rank     int    `json:"rank"`
 	Time     int64  `json:"time"`
 }
@@ -32,7 +32,7 @@ type Leaderboard struct {
 	Entries []Rank `json:"entries"`
 }
 type ButtonPress struct {
-	UserName string `json:"user_name"`
+	Username string `json:"username"`
 }
 type Time struct {
 	Time int64 `json:"time"`
@@ -53,12 +53,12 @@ func GetLeaderboard(send chan []byte) error {
 		Entries: make([]Rank, 0, len(rank)),
 	}
 	for i, entry := range rank {
-		userName, ok := entry.Member.(string)
+		username, ok := entry.Member.(string)
 		if !ok {
 			continue
 		}
 		leaderboard.Entries = append(leaderboard.Entries, Rank{
-			UserName: userName,
+			Username: username,
 			Rank:     i + 1,
 			Time:     int64(entry.Score),
 		})
@@ -75,7 +75,7 @@ func GetLeaderboard(send chan []byte) error {
 	send <- data
 	return nil
 }
-func PressButton(userName string, broadcast chan []byte) error {
+func PressButton(username string, broadcast chan []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -85,7 +85,7 @@ func PressButton(userName string, broadcast chan []byte) error {
 	score := countdownTime - (now - prev)
 	// Send button press message
 	b := ButtonPress{
-		UserName: userName,
+		Username: username,
 	}
 	data, err := json.Marshal(b)
 	msg := message{
@@ -102,7 +102,7 @@ func PressButton(userName string, broadcast chan []byte) error {
 		LT: true,
 		Members: []redis.Z{{
 			Score:  float64(score),
-			Member: userName,
+			Member: username,
 		}},
 	}).Result()
 	if err != nil {
