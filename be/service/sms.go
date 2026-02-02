@@ -1,21 +1,32 @@
 package service
 
 import (
-	"button/config"
 	"button/errorx"
+	"os"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	dypnsapi "github.com/alibabacloud-go/dypnsapi-20170525/v2/client"
+	"github.com/joho/godotenv"
 )
 
 var (
-	clinet *dypnsapi.Client
+	clinet        *dypnsapi.Client
+	signName            = "速通互联验证码"
+	templateCode        = "100001"
+	templateParam       = `{"code":"##code##","min":"5"}`
+	CodeLenth     int64 = 6
 )
 
 func InitSMSClient() {
+	godotenv.Load()
+	keyID, ok1 := os.LookupEnv("ACCESS_KEY_ID")
+	keySecret, ok2 := os.LookupEnv("ACCESS_KEY_SECRET")
+	if !ok1 || !ok2 {
+		panic("failed to get sms key from env")
+	}
 	config := &openapi.Config{
-		AccessKeyId:     &config.ACCESS_KEY_ID,
-		AccessKeySecret: &config.ACCESS_KEY_SECRET,
+		AccessKeyId:     &keyID,
+		AccessKeySecret: &keySecret,
 	}
 	c, err := dypnsapi.NewClient(config)
 	if err != nil {
@@ -27,10 +38,10 @@ func InitSMSClient() {
 func SendVerifyCode(phoneNumber string) error {
 	req := &dypnsapi.SendSmsVerifyCodeRequest{
 		PhoneNumber:   &phoneNumber,
-		SignName:      &config.SignName,
-		TemplateCode:  &config.TemplateCode,
-		TemplateParam: &config.TemplateParam,
-		CodeLength:    &config.CodeLenth,
+		SignName:      &signName,
+		TemplateCode:  &templateCode,
+		TemplateParam: &templateParam,
+		CodeLength:    &CodeLenth,
 	}
 	resp, err := clinet.SendSmsVerifyCode(req)
 	if err != nil {

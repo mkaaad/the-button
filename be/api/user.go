@@ -1,7 +1,6 @@
 package api
 
 import (
-	"button/config"
 	"button/model"
 	"button/service"
 	"net/http"
@@ -49,7 +48,7 @@ func VerifyCode(c *gin.Context) {
 		})
 		return
 	}
-	if len(u.VerifyCode) != int(config.CodeLenth) {
+	if len(u.VerifyCode) != int(service.CodeLenth) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"info": "验证码格式错误",
 		})
