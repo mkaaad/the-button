@@ -16,6 +16,9 @@ func handleMessage(msg []byte, username string, send chan []byte, broadcast chan
 	case GET_LEADEROARD:
 		return service.GetLeaderboard(send)
 	case PRESS_BUTTON:
+		if service.IsLocked(username, send) {
+			return nil
+		}
 		return service.PressButton(username, broadcast)
 	case GET_TIME:
 		return service.GetTime(send)

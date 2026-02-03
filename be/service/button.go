@@ -12,6 +12,7 @@ import (
 
 var (
 	startTime atomic.Int64
+	lockTTL   = 5 * time.Second
 )
 
 const rankKey = "button_leaderboard"
@@ -78,7 +79,6 @@ func GetLeaderboard(send chan []byte) error {
 func PressButton(username string, broadcast chan []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-
 	// Calculate time since last press
 	now := time.Now().UnixMilli()
 	prev := startTime.Swap(now)
@@ -127,4 +127,26 @@ func GetTime(send chan []byte) error {
 	}
 	send <- data
 	return nil
+}
+func IsLocked(username string, send chan []byte) bool {
+	ctx := context.Background()
+	count, err := dao.Rdb.Incr(ctx, username).Result()
+	if err != nil {
+		return true
+	}
+
+	if count == 1 {
+		dao.Rdb.Expire(ctx, username, lockTTL)
+		return false
+	} else {
+		msg := message{
+			Type: "lock",
+		}
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return true
+		}
+		send <- data
+		return true
+	}
 }
