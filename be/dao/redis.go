@@ -4,23 +4,25 @@ import (
 	"context"
 	"log"
 
+	"button/config"
+
 	"github.com/go-redis/redis/v8"
 )
 
 var Rdb *redis.Client
 
 func InitRedis() {
-	// Initialize Redis connection here
+	// 初始化 Redis 客户端
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
+		Addr:     config.RedisAddr,
+		Password: config.RedisPassword,
+		DB:       config.RedisDB,
 	})
 
 	_, err := rdb.Ping(context.Background()).Result()
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		log.Fatalf("无法连接至 Redis: %v", err)
 	}
 	Rdb = rdb
-	log.Println("Connected to Redis successfully")
+	log.Println("成功连接至 Redis")
 }
