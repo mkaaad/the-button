@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button Game - WebSocket 客户端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        /* 横幅通知容器：预留3条横幅高度，最多显示3条 */
+        .notification-container {
+            /* 预留3条横幅高度：单条40px + 间距5px，3条总高度=40*3 + 5*2 = 130px */
+            height: 130px;
+            overflow-y: hidden; /* 最多3条，无需滚动 */
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .notification-banner {
+            background: #007bff;
+            color: white;
+            padding: 0 15px;
+            text-align: center;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
+            animation: slideIn 0.3s ease forwards;
+            /* 固定高度，确保容器高度计算准确 */
+            height: 40px;
+            line-height: 40px;
+        }
+        /* 消息滑入动画 */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        /* 核心按钮样式 */
+        .core-button {
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px rgba(220, 53, 69, 0.3);
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .core-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px rgba(220, 53, 69, 0.4);
+        }
+        .core-button:active {
+            transform: scale(0.98);
+        }
+        .core-button:disabled {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .connect-btn {
+            padding: 8px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 15px;
+        }
+        .connect-btn:hover {
+            background: #218838;
+        }
+        .connect-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .leaderboard-panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .leaderboard-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+        /* 排行榜平滑更新样式 */
+        .leaderboard-container {
+            overflow: hidden;
+            position: relative;
+        }
+        #leaderboardTable {
+            width: 100%;
+            border-collapse: collapse;
+            transition: all 0.5s ease;
+            opacity: 1;
+        }
+        #leaderboardTable.updating {
+            opacity: 0.3;
+            transform: translateY(5px);
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #eee;
+            text-align: center;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        /* 倒计时数字样式（去掉分钟，只显示秒+毫秒） */
+        .countdown {
+            font-size: 48px; /* 放大秒数显示 */
+            line-height: 1.2;
+        }
+        .countdown-ms {
+            font-size: 24px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 横幅通知容器：支持消息堆叠 -->
+        <div id="notificationContainer" class="notification-container"></div>
+
+        <!-- 控制面板（移除按钮上方剩余时间提示） -->
+        <div class="control-panel">
+            <button id="connectBtn" class="connect-btn">连接服务端</button>
+            <div id="status" class="status disconnected">未连接</div>
+
+            <!-- 核心按钮（仅保留按钮上的剩余时间显示） -->
+            <button id="pressBtn" class="core-button" disabled>
+                <span class="countdown">60</span>
+                <span class="countdown-ms">.000</span>
+            </button>
+        </div>
+
+        <!-- 排行榜面板 -->
+        <div class="leaderboard-panel">
+            <h3>排行榜（前100名）</h3>
+            <div class="leaderboard-container">
+                <table id="leaderboardTable">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>用户名</th>
+                            <th>按键间隔(秒)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBody">
+                        <tr>
+                            <td colspan="3">请先连接服务端并获取排行榜数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 核心常量（与服务端对应）
+        const CMD = {
+            GET_TIME: "1",
+            GET_LEADERBOARD: "2",
+            PRESS_BUTTON: "3"
+        };
+
+        // 硬编码配置（修改这里的地址和默认用户名）
+        const WS_URL = "ws://localhost:8080/ws"; // 替换为你的服务端实际地址
+        const DEFAULT_USER_NAME = "default_player"; // 固定用户名
+
+        // 全局变量
+        let ws = null;
+        let reconnectTimer = null;
+        const RECONNECT_INTERVAL = 3000; // 重连间隔3秒
+        let serverStartTime = 0; // 服务端返回的起始时间戳
+        let countdownTimer = null; // 倒计时定时器
+        const COUNTDOWN_TOTAL = 60 * 1000; // 60秒（毫秒）
+
+        // DOM 元素
+        const connectBtn = document.getElementById('connectBtn');
+        const pressBtn = document.getElementById('pressBtn');
+        const statusEl = document.getElementById('status');
+        const leaderboardTableEl = document.getElementById('leaderboardTable');
+        const leaderboardBodyEl = document.getElementById('leaderboardBody');
+        const notificationContainerEl = document.getElementById('notificationContainer'); // 消息容器
+        const countdownEl = pressBtn.querySelector('.countdown');
+        const countdownMsEl = pressBtn.querySelector('.countdown-ms');
+
+        // 更新连接状态
+        function updateStatus(text, type) {
+            statusEl.textContent = text;
+            statusEl.className = `status ${type}`;
+
+            // 更新按钮状态（仅判断连接状态）
+            const isConnected = type === 'connected';
+            connectBtn.disabled = isConnected;
+            pressBtn.disabled = !isConnected;
+        }
+
+        // 发送 WS 消息
+        function sendMessage(cmd) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('WebSocket 未连接！');
+                return false;
+            }
+            try {
+                ws.send(cmd);
+                return true;
+            } catch (e) {
+                console.error('发送消息失败：', e);
+                alert('发送消息失败，请检查连接！');
+                return false;
+            }
+        }
+
+        // 解析服务端返回的消息
+        function parseMessage(data) {
+            try {
+                return JSON.parse(data);
+            } catch (e) {
+                console.error('解析消息失败：', e);
+                alert('收到无效的消息格式！');
+                return null;
+            }
+        }
+
+        // 格式化剩余时间（毫秒转 秒.毫秒 格式，去掉分钟）
+        function formatTime(ms) {
+            if (ms < 0) ms = 0;
+            const totalSeconds = Math.floor(ms / 1000); // 总秒数（无分钟）
+            const milliseconds = ms % 1000; // 毫秒部分
+
+            // 补零保证格式统一（毫秒补3位）
+            const msStr = String(milliseconds).padStart(3, '0');
+
+            return {
+                main: `${totalSeconds}`, // 按钮主显示：60、59
+                ms: `.${msStr}` // 按钮毫秒显示：.000、.888
+            };
+        }
+
+        // 格式化排行榜时间（毫秒转 X.XXX 秒，保留3位小数）
+        function formatRankTime(ms) {
+            if (ms < 0) ms = 0;
+            const seconds = ms / 1000;
+            return seconds.toFixed(3);
+        }
+
+        // 更新剩余时间显示（仅更新按钮上的内容）
+        function updateRemainingTime() {
+            if (serverStartTime === 0) {
+                const emptyTime = formatTime(COUNTDOWN_TOTAL); // 默认60秒
+                countdownEl.textContent = emptyTime.main;
+                countdownMsEl.textContent = emptyTime.ms;
+                return;
+            }
+
+            // 计算剩余时间：60秒 - (当前时间 - 服务端起始时间)
+            const now = Date.now();
+            const elapsed = now - serverStartTime;
+            const remaining = Math.max(0, COUNTDOWN_TOTAL - elapsed);
+
+            const timeObj = formatTime(remaining);
+            countdownEl.textContent = timeObj.main;
+            countdownMsEl.textContent = timeObj.ms;
+
+            // 如果剩余时间为0，禁用按钮
+            if (remaining <= 0) {
+                pressBtn.disabled = true;
+            } else if (ws && ws.readyState === WebSocket.OPEN) {
+                pressBtn.disabled = false;
+            }
+        }
+
+        // 启动倒计时定时器（毫秒级更新）
+        function startCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+            }
+            updateRemainingTime();
+            countdownTimer = setInterval(updateRemainingTime, 10);
+        }
+
+        // 停止倒计时
+        function stopCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+            serverStartTime = 0;
+            updateRemainingTime();
+        }
+
+        // 添加横幅消息（最多保留3条，旧消息上顶）
+        function addBannerMessage(message) {
+            // 创建新消息元素
+            const bannerEl = document.createElement('div');
+            bannerEl.className = 'notification-banner';
+            bannerEl.textContent = message;
+
+            // 插入到容器底部（新消息在最下方，旧消息向上顶）
+            notificationContainerEl.appendChild(bannerEl);
+
+            // 限制消息数量（最多保留3条）
+            const maxMessages = 3; // 核心修改：从10改为3
+            const messages = notificationContainerEl.querySelectorAll('.notification-banner');
+            if (messages.length > maxMessages) {
+                // 删除最旧的第一条消息
+                messages[0].remove();
+            }
+
+            // 自动滚动到底部（显示最新消息）
+            notificationContainerEl.scrollTop = notificationContainerEl.scrollHeight;
+        }
+
+        // 平滑更新排行榜
+        function updateLeaderboard(entries) {
+            leaderboardTableEl.classList.add('updating');
+
+            setTimeout(() => {
+                leaderboardBodyEl.innerHTML = '';
+
+                if (!entries || entries.length === 0) {
+                    leaderboardBodyEl.innerHTML = '<tr><td colspan="3">暂无排行榜数据</td></tr>';
+                    leaderboardTableEl.classList.remove('updating');
+                    return;
+                }
+
+                let index = 0;
+                function addRow() {
+                    if (index >= entries.length) {
+                        leaderboardTableEl.classList.remove('updating');
+                        return;
+                    }
+
+                    const item = entries[index];
+                    const tr = document.createElement('tr');
+                    tr.style.opacity = '0';
+                    tr.style.transform = 'translateY(5px)';
+                    tr.style.transition = 'all 0.2s ease ' + (index * 0.01) + 's';
+
+                    tr.innerHTML = `
+                        <td>${item.rank}</td>
+                        <td>${item.user_name || '未知用户'}</td>
+                        <td>${formatRankTime(item.time)}</td>
+                    `;
+
+                    leaderboardBodyEl.appendChild(tr);
+
+                    setTimeout(() => {
+                        tr.style.opacity = '1';
+                        tr.style.transform = 'translateY(0)';
+                    }, 10);
+
+                    index++;
+                    setTimeout(addRow, 10);
+                }
+
+                addRow();
+            }, 300);
+        }
+
+        // 建立 WS 连接
+        function connectWS() {
+            if (ws) {
+                ws.close();
+            }
+
+            stopCountdown();
+            updateStatus('正在连接...', 'connecting');
+
+            try {
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = function() {
+                    clearTimeout(reconnectTimer);
+                    updateStatus('已连接', 'connected');
+                    sendMessage(CMD.GET_TIME);
+                    setTimeout(() => {
+                        sendMessage(CMD.GET_LEADERBOARD);
+                    }, 500);
+                };
+
+                // 接收消息（核心修改：仅显示按下按钮的用户名，移除时间戳相关逻辑）
+                ws.onmessage = function(event) {
+                    const msg = parseMessage(event.data);
+                    if (!msg) return;
+
+                    console.log('收到消息：', msg);
+
+                    switch (msg.type) {
+                        case 'time':
+                            serverStartTime = msg.data.time;
+                            startCountdown();
+                            break;
+
+                        case 'leaderboard':
+                            updateLeaderboard(msg.data.entries);
+                            break;
+
+                        case 'button_press':
+                            const pressData = msg.data;
+                            // 仅显示用户名，移除所有时间相关内容
+                            const userName = pressData.user_name || '未知用户';
+                            addBannerMessage(`${userName} 按下了按钮！`);
+                            // 自动拉取最新时间和排行榜
+                            sendMessage(CMD.GET_TIME);
+                            setTimeout(() => {
+                                sendMessage(CMD.GET_LEADERBOARD);
+                            }, 300);
+                            break;
+
+                        default:
+                            console.warn('未知消息类型：', msg.type);
+                    }
+                };
+
+                ws.onclose = function() {
+                    updateStatus('连接已断开', 'disconnected');
+                    stopCountdown();
+                    reconnectTimer = setTimeout(() => {
+                        connectWS();
+                    }, RECONNECT_INTERVAL);
+                };
+
+                ws.onerror = function(error) {
+                    console.error('WS 错误：', error);
+                    updateStatus('连接出错', 'disconnected');
+                    stopCountdown();
+                };
+
+            } catch (e) {
+                console.error('创建 WS 连接失败：', e);
+                updateStatus('连接失败', 'disconnected');
+                stopCountdown();
+            }
+        }
+
+        // 绑定按钮事件
+        connectBtn.addEventListener('click', connectWS);
+
+        pressBtn.addEventListener('click', function() {
+            sendMessage(CMD.PRESS_BUTTON);
+            this.disabled = true;
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    this.disabled = false;
+                }
+            }, 500);
+        });
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', function() {
+            if (ws) ws.close();
+            if (countdownTimer) clearInterval(countdownTimer);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+        });
+    </script>
+</body>
+</html>
