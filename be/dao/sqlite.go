@@ -3,7 +3,7 @@ package dao
 import (
 	"button/model"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
