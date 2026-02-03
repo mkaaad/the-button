@@ -1,17 +1,15 @@
-FROM golang:1.24.4-alpine AS builder
+FROM golang:1.24.4 AS builder
 
 WORKDIR /app
 
 COPY . .
 
 RUN go mod tidy && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/the-button ./cmd/
+    GOOS=linux GOARCH=amd64 go build -o /app/the-button ./cmd/
 
-FROM alpine:latest
+FROM debian:bookworm-slim
 
 WORKDIR /app
-
-RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/the-button .
 
