@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>短信验证码登录</title>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: #fff;
+            border-radius: 8px;
+            padding: 30px 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        .login-title {
+            text-align: center;
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .form-item {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 15px;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            font-size: 15px;
+            color: #333;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .form-input:focus {
+            border-color: #1989fa;
+        }
+        .form-input::placeholder {
+            color: #c9c9c9;
+        }
+        .clear-btn {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #c9c9c9;
+            cursor: pointer;
+            font-size: 16px;
+            display: none;
+        }
+        /* 修复叉号偏移：新增专用类，替代行内样式，定位更精准 */
+        .clear-btn--captcha {
+            right: 120px;
+        }
+        .clear-btn--sms {
+            right: 120px;
+        }
+        .form-input:focus + .clear-btn,
+        .form-input:not(:placeholder-shown) + .clear-btn {
+            display: block;
+        }
+        .clear-btn:hover {
+            color: #999;
+        }
+        .captcha-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .captcha-input {
+            flex: 1;
+        }
+        .captcha-img {
+            width: 100px;
+            height: 44px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid #e5e5e5;
+            object-fit: cover;
+        }
+        .sms-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .sms-input {
+            flex: 1;
+        }
+        .send-btn {
+            width: 110px;
+            height: 44px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1989fa;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .send-btn:disabled {
+            background-color: #c9c9c9;
+            cursor: not-allowed;
+        }
+        .login-btn {
+            width: 100%;
+            height: 48px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1989fa;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        .login-btn:disabled {
+            background-color: #c9c9c9;
+            cursor: not-allowed;
+        }
+        .error-tip {
+            font-size: 12px;
+            color: #f53f3f;
+            margin-top: 5px;
+            display: none;
+        }
+        .error-tip.show {
+            display: block;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2 class="login-title">短信验证码登录</h2>
+        <form id="loginForm">
+            <!-- 手机号输入框（原有） -->
+            <div class="form-item">
+                <label class="form-label">手机号</label>
+                <input type="tel" class="form-input" id="phone" placeholder="请输入11位手机号" autocomplete="off">
+                <i class="fa-solid fa-times clear-btn" id="clearPhone"></i>
+                <div class="error-tip" id="phoneTip"></div>
+            </div>
+            <!-- 新增：用户名输入框，与原有样式保持一致 -->
+            <div class="form-item">
+                <label class="form-label">用户名</label>
+                <input type="text" class="form-input" id="username" placeholder="请输入3-20位用户名（字母/数字/下划线）" autocomplete="off">
+                <i class="fa-solid fa-times clear-btn" id="clearUsername"></i>
+                <div class="error-tip" id="usernameTip"></div>
+            </div>
+            <!-- 图形验证码输入框（原有，修改叉号class） -->
+            <div class="form-item">
+                <label class="form-label">图形验证码</label>
+                <div class="captcha-row">
+                    <input type="text" class="form-input captcha-input" id="captchaCode" placeholder="请输入图形验证码" autocomplete="off">
+                    <img src="" alt="图形验证码" class="captcha-img" id="captchaImg" title="点击刷新验证码">
+                </div>
+                <i class="fa-solid fa-times clear-btn clear-btn--captcha" id="clearCaptcha"></i>
+                <div class="error-tip" id="captchaTip"></div>
+            </div>
+            <!-- 短信验证码输入框（原有，修改叉号class） -->
+            <div class="form-item">
+                <label class="form-label">短信验证码</label>
+                <div class="sms-row">
+                    <input type="text" class="form-input sms-input" id="smsCode" placeholder="请输入6位短信验证码" autocomplete="off">
+                    <button type="button" class="send-btn" id="sendBtn">发送验证码</button>
+                </div>
+                <i class="fa-solid fa-times clear-btn clear-btn--sms" id="clearSms"></i>
+                <div class="error-tip" id="smsTip"></div>
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn">登录/注册</button>
+        </form>
+    </div>
+
+    <script>
+        const baseURL = 'http://localhost:8080';
+        let captchaId = '';
+        let countDown = 0;
+        let timer = null;
+
+        // 原有元素（保留）
+        const phone = document.getElementById('phone');
+        const captchaCode = document.getElementById('captchaCode');
+        const captchaImg = document.getElementById('captchaImg');
+        const smsCode = document.getElementById('smsCode');
+        const sendBtn = document.getElementById('sendBtn');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginForm = document.getElementById('loginForm');
+        const clearPhone = document.getElementById('clearPhone');
+        const clearCaptcha = document.getElementById('clearCaptcha');
+        const clearSms = document.getElementById('clearSms');
+        const phoneTip = document.getElementById('phoneTip');
+        const captchaTip = document.getElementById('captchaTip');
+        const smsTip = document.getElementById('smsTip');
+        // 新增：用户名相关元素
+        const username = document.getElementById('username');
+        const clearUsername = document.getElementById('clearUsername');
+        const usernameTip = document.getElementById('usernameTip');
+
+        // 原有正则（保留）+ 新增：用户名正则（3-20位字母、数字、下划线）
+        const phoneReg = /^1[3-9]\d{9}$/;
+        const usernameReg = /^[a-zA-Z0-9_]{3,20}$/;
+
+        window.onload = function() {
+            getCaptcha();
+            bindAllEvents();
+        };
+
+        function bindAllEvents() {
+            // 原有清除按钮事件（保留）
+            clearPhone.onclick = () => { phone.value = ''; hideTip(phoneTip); };
+            clearCaptcha.onclick = () => { captchaCode.value = ''; hideTip(captchaTip); };
+            clearSms.onclick = () => { smsCode.value = ''; hideTip(smsTip); };
+            // 新增：用户名清除按钮事件
+            clearUsername.onclick = () => { username.value = ''; hideTip(usernameTip); };
+
+            captchaImg.onclick = getCaptcha;
+            sendBtn.onclick = sendSmsCode;
+
+            loginForm.onsubmit = function(e) {
+                e.preventDefault();
+                handleLogin();
+            };
+
+            // 核心修复：ID映射精准关联输入框和提示，新增用户名映射
+            const inputTipMap = {
+                phone: 'phoneTip',
+                username: 'usernameTip', // 新增
+                captchaCode: 'captchaTip',
+                smsCode: 'smsTip'
+            };
+            // 新增用户名输入框到遍历数组
+            [phone, username, captchaCode, smsCode].forEach(input => {
+                input.oninput = function() {
+                    const tipId = inputTipMap[this.id];
+                    tipId && hideTip(document.getElementById(tipId));
+                };
+            });
+        }
+
+        async function getCaptcha() {
+            try {
+                const res = await fetch(`${baseURL}/sms/captcha`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.info === 'success') {
+                    captchaId = data.data.captcha_id;
+                    captchaImg.src = data.data.image_base64;
+                    captchaCode.value = '';
+                    hideTip(captchaTip);
+                } else {
+                    showTip(captchaTip, '图形验证码获取失败，请重试');
+                }
+            } catch (err) {
+                console.error('获取图形验证码失败：', err);
+                showTip(captchaTip, '服务器错误，无法获取验证码');
+            }
+        }
+
+        async function sendSmsCode() {
+            const phoneVal = phone.value.trim();
+            const captchaCodeVal = captchaCode.value.trim();
+
+            if (!phoneVal) {
+                showTip(phoneTip, '请输入手机号');
+                phone.focus();
+                return;
+            }
+            if (!phoneReg.test(phoneVal)) {
+                showTip(phoneTip, '手机号格式错误（请输入11位有效手机号）');
+                phone.focus();
+                return;
+            }
+            if (!captchaCodeVal) {
+                showTip(captchaTip, '请输入图形验证码');
+                captchaCode.focus();
+                return;
+            }
+
+            setBtnLoading(sendBtn, true, '发送中...');
+
+            try {
+                const res = await fetch(`${baseURL}/sms/code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_number: phoneVal,
+                        captcha_id: captchaId,
+                        code: captchaCodeVal
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    showTip(smsTip, '短信发送成功，请注意查收', false);
+                    startCountDown(60);
+                    // 移除：发送成功后不再清空图形验证码、不再刷新图形验证码
+                    // captchaCode.value = '';
+                    // getCaptcha();
+                } else {
+                    showTip(smsTip, data.info || '短信发送失败');
+                    getCaptcha(); // 失败时仍刷新，保证安全性
+                }
+            } catch (err) {
+                console.error('发送短信失败：', err);
+                showTip(smsTip, '网络错误，短信发送失败');
+            } finally {
+                setBtnLoading(sendBtn, false, '发送验证码');
+            }
+        }
+
+        async function handleLogin() {
+            const phoneVal = phone.value.trim();
+            const usernameVal = username.value.trim(); // 新增：获取用户名
+            const smsCodeVal = smsCode.value.trim();
+
+            hideAllTips();
+
+            // 新增：用户名验证
+            if (!usernameVal) {
+                showTip(usernameTip, '请输入用户名');
+                username.focus();
+                return;
+            }
+            if (!usernameReg.test(usernameVal)) {
+                showTip(usernameTip, '用户名格式错误（3-20位字母/数字/下划线）');
+                username.focus();
+                return;
+            }
+            // 原有验证（保留）
+            if (!phoneVal) {
+                showTip(phoneTip, '请输入手机号');
+                phone.focus();
+                return;
+            }
+            if (!phoneReg.test(phoneVal)) {
+                showTip(phoneTip, '手机号格式错误');
+                phone.focus();
+                return;
+            }
+            if (!smsCodeVal) {
+                showTip(smsTip, '请输入6位短信验证码');
+                smsCode.focus();
+                return;
+            }
+            if (smsCodeVal.length !== 6) {
+                showTip(smsTip, '短信验证码必须为6位数字');
+                smsCode.focus();
+                return;
+            }
+
+            setBtnLoading(loginBtn, true, '登录中...');
+
+            try {
+                const res = await fetch(`${baseURL}/sms/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: usernameVal,    // 匹配 json:"username"
+                        phone_number: phoneVal,   // 匹配 json:"phone_number"（替换原PhoneNumber）
+                        verify_code: smsCodeVal   // 匹配 json:"verify_code"（替换原VerifyCode）
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert('登录/注册成功！');
+                } else {
+                    showTip(smsTip, data.info || '短信验证码错误或已过期');
+                }
+            } catch (err) {
+                console.error('登录失败：', err);
+                showTip(smsTip, '网络错误，登录失败，请检查后端是否启动');
+            } finally {
+                setBtnLoading(loginBtn, false, '登录/注册');
+            }
+        }
+
+        function showTip(el, text, isError = true) {
+            el.innerText = text;
+            el.classList.add('show');
+            !isError && (el.style.color = '#00b42a');
+        }
+
+        function hideTip(el) {
+            el.classList.remove('show');
+            el.innerText = '';
+            el.style.color = '#f53f3f';
+        }
+
+        // 新增：隐藏所有提示（包含用户名）
+        function hideAllTips() {
+            hideTip(phoneTip);
+            hideTip(usernameTip);
+            hideTip(captchaTip);
+            hideTip(smsTip);
+        }
+
+        function setBtnLoading(btn, isLoading, text) {
+            btn.disabled = isLoading;
+            btn.innerHTML = isLoading ? `<span class="loading"></span>${text}` : text;
+        }
+
+        function startCountDown(time = 60) {
+            countDown = time;
+            sendBtn.disabled = true;
+            sendBtn.innerText = `${countDown}s后重发`;
+            timer && clearInterval(timer);
+            timer = setInterval(() => {
+                countDown--;
+                if (countDown > 0) {
+                    sendBtn.innerText = `${countDown}s后重发`;
+                } else {
+                    clearInterval(timer);
+                    timer = null;
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = '发送验证码';
+                }
+            }, 1000);
+        }
+
+        window.onbeforeunload = function() {
+            timer && clearInterval(timer);
+        };
+    </script>
+</body>
+</html>

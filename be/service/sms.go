@@ -1,12 +1,12 @@
 package service
 
 import (
+	"button/config"
 	"button/errorx"
-	"os"
+	"log"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	dypnsapi "github.com/alibabacloud-go/dypnsapi-20170525/v2/client"
-	"github.com/joho/godotenv"
 )
 
 var (
@@ -18,15 +18,9 @@ var (
 )
 
 func InitSMSClient() {
-	godotenv.Load()
-	keyID, ok1 := os.LookupEnv("ACCESS_KEY_ID")
-	keySecret, ok2 := os.LookupEnv("ACCESS_KEY_SECRET")
-	if !ok1 || !ok2 {
-		panic("failed to get sms key from env")
-	}
 	config := &openapi.Config{
-		AccessKeyId:     &keyID,
-		AccessKeySecret: &keySecret,
+		AccessKeyId:     &config.AccessKeyID,
+		AccessKeySecret: &config.AccessKeySecret,
 	}
 	c, err := dypnsapi.NewClient(config)
 	if err != nil {
@@ -45,9 +39,11 @@ func SendVerifyCode(phoneNumber string) error {
 	}
 	resp, err := clinet.SendSmsVerifyCode(req)
 	if err != nil {
+		log.Println(err)
 		return &errorx.SMSSendErr{}
 	}
 	if resp.Body.Code == nil {
+		log.Println(err)
 		return &errorx.SMSRespCodeNullErr{}
 	}
 	code := *resp.Body.Code

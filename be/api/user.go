@@ -16,15 +16,15 @@ var mobileRegexp = regexp.MustCompile(`^1[3-9]\d{9}$`)
 
 type verify struct {
 	PhoneNumber string `json:"phone_number" binding:"required"`
-	CaptchaID   string `form:"captcha_id" json:"captcha_id" binding:"required"` // 验证码ID
-	Code        string `form:"code" json:"code" binding:"required,digit"`
+	CaptchaID   string `json:"captcha_id" binding:"required"` // 验证码ID
+	Code        string `json:"code" binding:"required"`
 }
 
 func SendVerifyCode(c *gin.Context) {
 	var v verify
 	if err := c.ShouldBindJSON(&v); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"info": "格式错误",
+			"info": "缺少信息",
 		})
 		return
 	}
