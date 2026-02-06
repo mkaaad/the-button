@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -13,6 +14,8 @@ var (
 	RedisAddr       string
 	RedisPassword   string
 	RedisDB         int
+	StartTime       time.Time = time.Now()
+	EndTime         time.Time = time.Now().Add(24 * time.Hour)
 )
 
 func InitConfig() {

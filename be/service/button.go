@@ -1,6 +1,7 @@
 package service
 
 import (
+	"button/config"
 	"button/dao"
 	"context"
 	"encoding/json"
@@ -40,7 +41,7 @@ type Time struct {
 }
 
 func StoreTime() {
-	startTime.Store(time.Now().UnixMilli())
+	startTime.Store(config.StartTime.UnixMilli())
 }
 func GetLeaderboard(send chan []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -142,11 +143,28 @@ func IsLocked(username string, send chan []byte) bool {
 		msg := message{
 			Type: "lock",
 		}
-		data, err := json.Marshal(msg)
-		if err != nil {
-			return true
-		}
+		data, _ := json.Marshal(msg)
 		send <- data
 		return true
 	}
+}
+func IsWithinTime(send chan []byte) bool {
+	now := time.Now()
+	if now.Before(config.StartTime) {
+		msg := message{
+			Type: "pending",
+		}
+		data, _ := json.Marshal(msg)
+		send <- data
+		return false
+	}
+	if now.After(config.EndTime) {
+		msg := message{
+			Type: "finished",
+		}
+		data, _ := json.Marshal(msg)
+		send <- data
+		return false
+	}
+	return true
 }
