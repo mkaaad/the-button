@@ -3,7 +3,6 @@ package service
 import (
 	"button/config"
 	"button/errorx"
-	"log"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	dypnsapi "github.com/alibabacloud-go/dypnsapi-20170525/v2/client"
@@ -39,11 +38,9 @@ func SendVerifyCode(phoneNumber string) error {
 	}
 	resp, err := clinet.SendSmsVerifyCode(req)
 	if err != nil {
-		log.Println(err)
 		return &errorx.SMSSendErr{}
 	}
 	if resp.Body.Code == nil {
-		log.Println(err)
 		return &errorx.SMSRespCodeNullErr{}
 	}
 	code := *resp.Body.Code

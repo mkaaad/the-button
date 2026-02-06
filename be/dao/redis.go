@@ -24,5 +24,4 @@ func InitRedis() {
 		log.Fatalf("无法连接至 Redis: %v", err)
 	}
 	Rdb = rdb
-	log.Println("成功连接至 Redis")
 }

@@ -8,8 +8,7 @@ import (
 )
 
 func SetupRoute() {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
+	r := gin.Default()
 	r.Use(middleware.Cors())
 	r.GET("/ws", middleware.VerifyCookie, api.WebSocketHandler)
 	r.POST("/sms/code", api.SendVerifyCode)
