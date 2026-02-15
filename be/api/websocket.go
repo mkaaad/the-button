@@ -23,12 +23,19 @@ var upgrader = websocket.Upgrader{
 // WebSocketHandler handles WebSocket upgrade requests.
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
-	username := c.GetString("username")
+	sessionID, err := c.Cookie("session_id")
+	if err != nil || sessionID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"info": "未登录",
+		})
+		return
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	client := connx.NewClient(conn)
+	client := connx.NewClient(conn, sessionID)
 	// Register new client
 	connx.ConnPool.Add(client)
 	// Ensure connection is closed on function exit
@@ -46,7 +53,7 @@ func WebSocketHandler(c *gin.Context) {
 			continue // Ignore non-text messages
 		}
 		// Handle the message
-		err = handleMessage(message, username, client.Send, broadcast)
+		err = handleMessage(message, client.SessionID, client.Send, broadcast)
 		if err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("wrong message format"))
 			log.Println("Error handling message:", err)

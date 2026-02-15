@@ -4,6 +4,7 @@ import (
 	"button/dao"
 	"button/errorx"
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,4 +46,17 @@ func setSessionIDToCookie(c *gin.Context, username string) error {
 	}
 	c.SetCookie("session_id", sessionID, 60*60*24, "/", "", false, true)
 	return nil
+}
+func IsLogin(sessionID string, send chan []byte) (string, bool) {
+	username, err := dao.Rdb.Get(context.Background(), sessionID).Result()
+	if err != nil {
+		msg := message{
+			Type: "unauthorized",
+		}
+		data, _ := json.Marshal(msg)
+		send <- data
+		return "", false
+
+	}
+	return username, true
 }

@@ -11,11 +11,15 @@ const (
 	PRESS_BUTTON   = "3"
 )
 
-func handleMessage(msg []byte, username string, send chan []byte, broadcast chan []byte) error {
+func handleMessage(msg []byte, sessionID string, send chan []byte, broadcast chan []byte) error {
 	switch string(msg) {
 	case GET_LEADEROARD:
 		return service.GetLeaderboard(send)
 	case PRESS_BUTTON:
+		username, ok := service.IsLogin(sessionID, send)
+		if !ok {
+			return nil
+		}
 		if !service.IsWithinTime(send) {
 			return nil
 		}

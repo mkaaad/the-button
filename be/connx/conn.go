@@ -5,8 +5,9 @@ import (
 )
 
 type Client struct {
-	Conn *websocket.Conn
-	Send chan []byte
+	Conn      *websocket.Conn
+	Send      chan []byte
+	SessionID string
 }
 
 func (c *Client) writeLoop() {
@@ -17,10 +18,11 @@ func (c *Client) writeLoop() {
 		}
 	}
 }
-func NewClient(conn *websocket.Conn) *Client {
+func NewClient(conn *websocket.Conn, sessionID string) *Client {
 	c := &Client{
-		Conn: conn,
-		Send: make(chan []byte, 128),
+		Conn:      conn,
+		Send:      make(chan []byte, 128),
+		SessionID: sessionID,
 	}
 	go c.writeLoop()
 	return c
