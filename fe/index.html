@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Button Game - 带登录弹窗</title>
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ========== 按钮游戏原有样式 ========== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        /* 横幅通知容器：预留3条横幅高度，最多显示3条 */
+        .notification-container {
+            height: 130px;
+            overflow-y: hidden;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .notification-banner {
+            background: #007bff;
+            color: white;
+            padding: 0 15px;
+            text-align: center;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
+            animation: slideIn 0.3s ease forwards;
+            height: 40px;
+            line-height: 40px;
+        }
+        /* 不同类型提示的背景色区分 */
+        .notification-banner.lock { background: #ffc107; color: #212529; }
+        .notification-banner.pending { background: #17a2b8; color: white; }
+        .notification-banner.finished { background: #dc3545; color: white; }
+        .notification-banner.unauthorized { background: #6610f2; color: white; }
+        /* 消息滑入动画 */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        /* 核心按钮样式 */
+        .core-button {
+            width: 280px;
+            height: 280px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 16px rgba(220, 53, 69, 0.3);
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .core-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px rgba(220, 53, 69, 0.4);
+        }
+        .core-button:active {
+            transform: scale(0.98);
+        }
+        .core-button:disabled {
+            background: linear-gradient(135deg, #6c757d, #5a6268);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .connect-btn {
+            padding: 8px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 15px;
+        }
+        .connect-btn:hover {
+            background: #218838;
+        }
+        .connect-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .leaderboard-panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .leaderboard-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+        /* 排行榜平滑更新样式 */
+        .leaderboard-container {
+            overflow: hidden;
+            position: relative;
+        }
+        #leaderboardTable {
+            width: 100%;
+            border-collapse: collapse;
+            transition: all 0.5s ease;
+            opacity: 1;
+        }
+        #leaderboardTable.updating {
+            opacity: 0.3;
+            transform: translateY(5px);
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #eee;
+            text-align: center;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        /* 倒计时数字样式（去掉分钟，只显示秒+毫秒） */
+        .countdown {
+            font-size: 48px;
+            line-height: 1.2;
+        }
+        .countdown-ms {
+            font-size: 24px;
+            opacity: 0.8;
+        }
+
+        /* ========== 登录弹窗样式 ========== */
+        /* 触发登录弹窗的按钮样式 */
+        .show-login-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #1989fa;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 9997;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .show-login-btn:hover {
+            background-color: #0e76d0;
+        }
+
+        /* 弹窗遮罩层 */
+        .login-mask {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 9998;
+            display: none; /* 默认隐藏 */
+            backdrop-filter: blur(2px); /* 毛玻璃效果，可选 */
+        }
+
+        /* 登录容器改为弹窗样式 */
+        .login-container {
+            max-width: 400px;
+            width: 90%; /* 适配移动端 */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            border-radius: 8px;
+            padding: 30px 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 9999;
+            display: none; /* 默认隐藏 */
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        /* 弹窗关闭按钮 */
+        .close-login-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            color: #999;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        .close-login-btn:hover {
+            background-color: #f5f5f5;
+            color: #666;
+        }
+
+        .login-title {
+            text-align: center;
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .form-item {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .form-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 15px;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            font-size: 15px;
+            color: #333;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .form-input:focus {
+            border-color: #1989fa;
+        }
+        .form-input::placeholder {
+            color: #c9c9c9;
+        }
+        .clear-btn {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #c9c9c9;
+            cursor: pointer;
+            font-size: 16px;
+            display: none;
+        }
+        /* 修复叉号偏移 */
+        .clear-btn--captcha {
+            right: 120px;
+        }
+        .clear-btn--sms {
+            right: 120px;
+        }
+        .form-input:focus + .clear-btn,
+        .form-input:not(:placeholder-shown) + .clear-btn {
+            display: block;
+        }
+        .clear-btn:hover {
+            color: #999;
+        }
+        .captcha-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .captcha-input {
+            flex: 1;
+        }
+        .captcha-img {
+            width: 100px;
+            height: 44px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid #e5e5e5;
+            object-fit: cover;
+        }
+        .sms-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .sms-input {
+            flex: 1;
+        }
+        .send-btn {
+            width: 110px;
+            height: 44px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1989fa;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .send-btn:disabled {
+            background-color: #c9c9c9;
+            cursor: not-allowed;
+        }
+        .login-btn {
+            width: 100%;
+            height: 48px;
+            border: none;
+            border-radius: 6px;
+            background-color: #1989fa;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        .login-btn:disabled {
+            background-color: #c9c9c9;
+            cursor: not-allowed;
+        }
+        .error-tip {
+            font-size: 12px;
+            color: #f53f3f;
+            margin-top: 5px;
+            display: none;
+        }
+        .error-tip.show {
+            display: block;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 弹窗显示动画 */
+        .login-container.show {
+            display: block;
+            animation: fadeInUp 0.3s ease;
+        }
+        .login-mask.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -45%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ========== 按钮游戏原有结构 ========== -->
+    <div class="container">
+        <!-- 横幅通知容器：支持消息堆叠 -->
+        <div id="notificationContainer" class="notification-container"></div>
+
+        <!-- 控制面板 -->
+        <div class="control-panel">
+            <button id="connectBtn" class="connect-btn">连接服务端</button>
+            <div id="status" class="status disconnected">未连接</div>
+
+            <!-- 核心按钮 -->
+            <button id="pressBtn" class="core-button" disabled>
+                <span class="countdown">60</span>
+                <span class="countdown-ms">.000</span>
+            </button>
+        </div>
+
+        <!-- 排行榜面板 -->
+        <div class="leaderboard-panel">
+            <h3>排行榜（前100名）</h3>
+            <div class="leaderboard-container">
+                <table id="leaderboardTable">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>用户名</th>
+                            <th>按键间隔(秒)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardBody">
+                        <tr>
+                            <td colspan="3">请先连接服务端并获取排行榜数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 登录弹窗结构 ========== -->
+    <!-- 触发登录弹窗的按钮 -->
+    <button id="showLoginBtn" class="show-login-btn">登录/注册</button>
+
+    <!-- 弹窗遮罩层 -->
+    <div class="login-mask" id="loginMask"></div>
+
+    <!-- 登录弹窗容器 -->
+    <div class="login-container" id="loginModal">
+        <!-- 关闭按钮 -->
+        <i class="fa-solid fa-times close-login-btn" id="closeLogin"></i>
+
+        <h2 class="login-title">短信验证码登录</h2>
+        <form id="loginForm">
+            <!-- 手机号输入框 -->
+            <div class="form-item">
+                <label class="form-label">手机号</label>
+                <input type="tel" class="form-input" id="phone" placeholder="请输入11位手机号" autocomplete="off">
+                <i class="fa-solid fa-times clear-btn" id="clearPhone"></i>
+                <div class="error-tip" id="phoneTip"></div>
+            </div>
+            <!-- 用户名输入框 -->
+            <div class="form-item">
+                <label class="form-label">用户名</label>
+                <input type="text" class="form-input" id="username" placeholder="请输入3-20位用户名（字母/数字/下划线）" autocomplete="off">
+                <i class="fa-solid fa-times clear-btn" id="clearUsername"></i>
+                <div class="error-tip" id="usernameTip"></div>
+            </div>
+            <!-- 图形验证码输入框 -->
+            <div class="form-item">
+                <label class="form-label">图形验证码</label>
+                <div class="captcha-row">
+                    <input type="text" class="form-input captcha-input" id="captchaCode" placeholder="请输入图形验证码" autocomplete="off">
+                    <img src="" alt="图形验证码" class="captcha-img" id="captchaImg" title="点击刷新验证码">
+                </div>
+                <i class="fa-solid fa-times clear-btn clear-btn--captcha" id="clearCaptcha"></i>
+                <div class="error-tip" id="captchaTip"></div>
+            </div>
+            <!-- 短信验证码输入框 -->
+            <div class="form-item">
+                <label class="form-label">短信验证码</label>
+                <div class="sms-row">
+                    <input type="text" class="form-input sms-input" id="smsCode" placeholder="请输入6位短信验证码" autocomplete="off">
+                    <button type="button" class="send-btn" id="sendBtn">发送验证码</button>
+                </div>
+                <i class="fa-solid fa-times clear-btn clear-btn--sms" id="clearSms"></i>
+                <div class="error-tip" id="smsTip"></div>
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn">登录/注册</button>
+        </form>
+    </div>
+
+    <script>
+        // ========== 核心常量与配置 ==========
+        // WS命令常量
+        const CMD = {
+            GET_TIME: "1",
+            GET_LEADERBOARD: "2",
+            PRESS_BUTTON: "3"
+        };
+
+        // 基础配置
+        const WS_BASE_URL = "ws://localhost:8080/ws"; // WS服务基础地址
+        const DEFAULT_USER_NAME = "default_player";   // 默认用户名
+        const SESSION_EXPIRE_DAYS = 7;                // session_id有效期（天）
+        const LOGIN_API_BASE_URL = "http://localhost:8080"; // 登录接口基础地址
+
+        // 全局变量（按钮游戏）
+        let ws = null;
+        let reconnectTimer = null;
+        const RECONNECT_INTERVAL = 3000; // 重连间隔3秒
+        let serverStartTime = 0; // 服务端返回的起始时间戳
+        let countdownTimer = null; // 倒计时定时器
+        const COUNTDOWN_TOTAL = 60 * 1000; // 60秒（毫秒）
+        let isRedirecting = false; // 废弃：原登录跳转标记，保留避免报错
+
+        // 全局变量（登录弹窗）
+        let captchaId = '';
+        let countDown = 0;
+        let timer = null;
+
+        // ========== DOM元素获取 ==========
+        // 按钮游戏元素
+        const connectBtn = document.getElementById('connectBtn');
+        const pressBtn = document.getElementById('pressBtn');
+        const statusEl = document.getElementById('status');
+        const leaderboardTableEl = document.getElementById('leaderboardTable');
+        const leaderboardBodyEl = document.getElementById('leaderboardBody');
+        const notificationContainerEl = document.getElementById('notificationContainer');
+        const countdownEl = pressBtn.querySelector('.countdown');
+        const countdownMsEl = pressBtn.querySelector('.countdown-ms');
+
+        // 登录弹窗元素
+        const loginMask = document.getElementById('loginMask');
+        const loginModal = document.getElementById('loginModal');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+        const closeLogin = document.getElementById('closeLogin');
+        const phone = document.getElementById('phone');
+        const captchaCode = document.getElementById('captchaCode');
+        const captchaImg = document.getElementById('captchaImg');
+        const smsCode = document.getElementById('smsCode');
+        const sendBtn = document.getElementById('sendBtn');
+        const loginForm = document.getElementById('loginForm');
+        const loginSubmitBtn = document.getElementById('loginBtn'); // 避免命名冲突
+        const clearPhone = document.getElementById('clearPhone');
+        const clearCaptcha = document.getElementById('clearCaptcha');
+        const clearSms = document.getElementById('clearSms');
+        const phoneTip = document.getElementById('phoneTip');
+        const captchaTip = document.getElementById('captchaTip');
+        const smsTip = document.getElementById('smsTip');
+        const username = document.getElementById('username');
+        const clearUsername = document.getElementById('clearUsername');
+        const usernameTip = document.getElementById('usernameTip');
+
+        // 正则表达式
+        const phoneReg = /^1[3-9]\d{9}$/;
+        const usernameReg = /^[a-zA-Z0-9_]{3,20}$/;
+
+        // ========== 工具函数 ==========
+        // Cookie操作工具函数
+        function setCookie(name, value, days = SESSION_EXPIRE_DAYS) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            const expires = "expires=" + date.toUTCString();
+            document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}; path=/; SameSite=Lax`;
+        }
+
+        function getCookie(name) {
+            const nameEQ = `${name}=`;
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                let cookie = cookies[i].trim();
+                if (cookie.indexOf(nameEQ) === 0) {
+                    return decodeURIComponent(cookie.substring(nameEQ.length));
+                }
+            }
+            return null;
+        }
+
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+        }
+
+        // UUID生成函数（v4 标准）
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 构建带session_id的WS连接地址
+        function buildWSUrl() {
+            let sessionId = getCookie('session_id');
+
+            // 无session_id时自动生成UUID并存储到Cookie
+            if (!sessionId) {
+                sessionId = generateUUID();
+                setCookie('session_id', sessionId);
+                console.log(`[Session] 自动生成session_id并存储：${sessionId}`);
+            }
+
+            // 拼接session_id参数
+            const separator = WS_BASE_URL.includes('?') ? '&' : '?';
+            const fullWSUrl = `${WS_BASE_URL}${separator}session_id=${encodeURIComponent(sessionId)}`;
+            console.log(`[WS] 连接地址：${fullWSUrl}`);
+            return fullWSUrl;
+        }
+
+        // ========== 按钮游戏核心逻辑 ==========
+        // 添加带类型的横幅消息
+        function addBannerMessage(message, type = 'default') {
+            const bannerEl = document.createElement('div');
+            bannerEl.className = `notification-banner ${type}`;
+            bannerEl.textContent = message;
+
+            notificationContainerEl.appendChild(bannerEl);
+
+            // 限制消息数量（最多保留3条）
+            const maxMessages = 3;
+            const messages = notificationContainerEl.querySelectorAll('.notification-banner');
+            if (messages.length > maxMessages) {
+                messages[0].remove();
+            }
+
+            notificationContainerEl.scrollTop = notificationContainerEl.scrollHeight;
+        }
+
+        // 更新连接状态
+        function updateStatus(text, type) {
+            statusEl.textContent = text;
+            statusEl.className = `status ${type}`;
+
+            const isConnected = type === 'connected';
+            connectBtn.disabled = isConnected;
+            pressBtn.disabled = !isConnected;
+        }
+
+        // 发送 WS 消息
+        function sendMessage(cmd) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addBannerMessage('WebSocket 未连接！', 'lock');
+                return false;
+            }
+            try {
+                ws.send(cmd);
+                return true;
+            } catch (e) {
+                console.error('发送消息失败：', e);
+                addBannerMessage('发送消息失败，请检查连接！', 'lock');
+                return false;
+            }
+        }
+
+        // 解析服务端返回的消息
+        function parseMessage(data) {
+            try {
+                return JSON.parse(data);
+            } catch (e) {
+                console.error('解析消息失败：', e);
+                addBannerMessage('收到无效的消息格式！', 'lock');
+                return null;
+            }
+        }
+
+        // 格式化剩余时间
+        function formatTime(ms) {
+            if (ms < 0) ms = 0;
+            const totalSeconds = Math.floor(ms / 1000);
+            const milliseconds = ms % 1000;
+            const msStr = String(milliseconds).padStart(3, '0');
+
+            return {
+                main: `${totalSeconds}`,
+                ms: `.${msStr}`
+            };
+        }
+
+        // 格式化排行榜时间
+        function formatRankTime(ms) {
+            if (ms < 0) ms = 0;
+            const seconds = ms / 1000;
+            return seconds.toFixed(3);
+        }
+
+        // 更新剩余时间显示
+        function updateRemainingTime() {
+            if (serverStartTime === 0) {
+                const emptyTime = formatTime(COUNTDOWN_TOTAL);
+                countdownEl.textContent = emptyTime.main;
+                countdownMsEl.textContent = emptyTime.ms;
+                return;
+            }
+
+            const now = Date.now();
+            const elapsed = now - serverStartTime;
+            const remaining = Math.max(0, COUNTDOWN_TOTAL - elapsed);
+
+            const timeObj = formatTime(remaining);
+            countdownEl.textContent = timeObj.main;
+            countdownMsEl.textContent = timeObj.ms;
+
+            if (remaining <= 0) {
+                pressBtn.disabled = true;
+            } else if (ws && ws.readyState === WebSocket.OPEN) {
+                pressBtn.disabled = false;
+            }
+        }
+
+        // 启动倒计时定时器
+        function startCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+            }
+            updateRemainingTime();
+            countdownTimer = setInterval(updateRemainingTime, 10);
+        }
+
+        // 停止倒计时
+        function stopCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+            serverStartTime = 0;
+            updateRemainingTime();
+        }
+
+        // 平滑更新排行榜
+        function updateLeaderboard(entries) {
+            leaderboardTableEl.classList.add('updating');
+
+            setTimeout(() => {
+                leaderboardBodyEl.innerHTML = '';
+
+                if (!entries || entries.length === 0) {
+                    leaderboardBodyEl.innerHTML = '<tr><td colspan="3">暂无排行榜数据</td></tr>';
+                    leaderboardTableEl.classList.remove('updating');
+                    return;
+                }
+
+                let index = 0;
+                function addRow() {
+                    if (index >= entries.length) {
+                        leaderboardTableEl.classList.remove('updating');
+                        return;
+                    }
+
+                    const item = entries[index];
+                    const tr = document.createElement('tr');
+                    tr.style.opacity = '0';
+                    tr.style.transform = 'translateY(5px)';
+                    tr.style.transition = 'all 0.2s ease ' + (index * 0.01) + 's';
+
+                    tr.innerHTML = `
+                        <td>${item.rank}</td>
+                        <td>${item.username || '未知用户'}</td>
+                        <td>${formatRankTime(item.time)}</td>
+                    `;
+
+                    leaderboardBodyEl.appendChild(tr);
+
+                    setTimeout(() => {
+                        tr.style.opacity = '1';
+                        tr.style.transform = 'translateY(0)';
+                    }, 10);
+
+                    index++;
+                    setTimeout(addRow, 10);
+                }
+
+                addRow();
+            }, 300);
+        }
+
+        // 建立 WS 连接
+        function connectWS() {
+            if (ws) {
+                ws.close();
+            }
+
+            stopCountdown();
+            updateStatus('正在连接...', 'connecting');
+            const wsUrl = buildWSUrl();
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {
+                    clearTimeout(reconnectTimer);
+                    updateStatus('已连接', 'connected');
+                    sendMessage(CMD.GET_TIME);
+                    setTimeout(() => {
+                        sendMessage(CMD.GET_LEADERBOARD);
+                    }, 500);
+                    isRedirecting = false;
+                };
+
+                // 接收消息（核心修改：unauthorized改为弹出登录弹窗）
+                ws.onmessage = function(event) {
+                    const msg = parseMessage(event.data);
+                    if (!msg) return;
+
+                    console.log('[WS] 收到消息：', msg);
+
+                    switch (msg.type) {
+                        case 'time':
+                            serverStartTime = msg.data.time;
+                            startCountdown();
+                            break;
+
+                        case 'leaderboard':
+                            updateLeaderboard(msg.data.entries);
+                            break;
+
+                        case 'button_press':
+                            const pressData = msg.data;
+                            const userName = pressData.username || '未知用户';
+                            addBannerMessage(`${userName} 按下了按钮！`);
+                            sendMessage(CMD.GET_TIME);
+                            setTimeout(() => {
+                                sendMessage(CMD.GET_LEADERBOARD);
+                            }, 300);
+                            break;
+
+                        case 'lock':
+                            addBannerMessage('请求过于频繁，请稍后再试！', 'lock');
+                            pressBtn.disabled = true;
+                            setTimeout(() => {
+                                if (ws && ws.readyState === WebSocket.OPEN) {
+                                    pressBtn.disabled = false;
+                                }
+                            }, 2000);
+                            break;
+
+                        case 'pending':
+                            addBannerMessage('活动尚未开始，请耐心等待！', 'pending');
+                            pressBtn.disabled = true;
+                            break;
+
+                        case 'finished':
+                            addBannerMessage('活动已结束，感谢参与！', 'finished');
+                            pressBtn.disabled = true;
+                            stopCountdown();
+                            break;
+
+                        case 'unauthorized':
+                            addBannerMessage('请先登录后再使用！', 'unauthorized');
+                            pressBtn.disabled = true;
+                            stopCountdown();
+                            showLoginModal(); // 替换跳转，改为显示登录弹窗
+                            break;
+
+                        default:
+                            console.warn('[WS] 未知消息类型：', msg.type);
+                    }
+                };
+
+                ws.onclose = function() {
+                    updateStatus('连接已断开', 'disconnected');
+                    stopCountdown();
+                    if (!isRedirecting) {
+                        reconnectTimer = setTimeout(() => {
+                            connectWS();
+                        }, RECONNECT_INTERVAL);
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    console.error('[WS] 错误：', error);
+                    updateStatus('连接出错', 'disconnected');
+                    stopCountdown();
+                };
+
+            } catch (e) {
+                console.error('[WS] 创建连接失败：', e);
+                updateStatus('连接失败', 'disconnected');
+                stopCountdown();
+            }
+        }
+
+        // ========== 登录弹窗核心逻辑 ==========
+        // 显示登录弹窗
+        function showLoginModal() {
+            loginMask.classList.add('show');
+            loginModal.classList.add('show');
+            phone.focus();
+            // 重置倒计时
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+                countDown = 0;
+                sendBtn.disabled = false;
+                sendBtn.innerText = '发送验证码';
+            }
+        }
+
+        // 隐藏登录弹窗
+        function hideLoginModal() {
+            loginMask.classList.remove('show');
+            loginModal.classList.remove('show');
+            clearAllInputs();
+            hideAllTips();
+        }
+
+        // 清空所有输入框
+        function clearAllInputs() {
+            phone.value = '';
+            username.value = '';
+            captchaCode.value = '';
+            smsCode.value = '';
+        }
+
+        // 显示提示
+        function showTip(el, text, isError = true) {
+            el.innerText = text;
+            el.classList.add('show');
+            !isError && (el.style.color = '#00b42a');
+        }
+
+        // 隐藏提示
+        function hideTip(el) {
+            el.classList.remove('show');
+            el.innerText = '';
+            el.style.color = '#f53f3f';
+        }
+
+        // 隐藏所有提示
+        function hideAllTips() {
+            hideTip(phoneTip);
+            hideTip(usernameTip);
+            hideTip(captchaTip);
+            hideTip(smsTip);
+        }
+
+        // 设置按钮加载状态
+        function setBtnLoading(btn, isLoading, text) {
+            btn.disabled = isLoading;
+            btn.innerHTML = isLoading ? `<span class="loading"></span>${text}` : text;
+        }
+
+        // 获取图形验证码
+        async function getCaptcha() {
+            try {
+                const res = await fetch(`${LOGIN_API_BASE_URL}/sms/captcha`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.info === 'success') {
+                    captchaId = data.data.captcha_id;
+                    captchaImg.src = data.data.image_base64;
+                    captchaCode.value = '';
+                    hideTip(captchaTip);
+                } else {
+                    showTip(captchaTip, '图形验证码获取失败，请重试');
+                }
+            } catch (err) {
+                console.error('获取图形验证码失败：', err);
+                showTip(captchaTip, '服务器错误，无法获取验证码');
+            }
+        }
+
+        // 发送短信验证码
+        async function sendSmsCode() {
+            const phoneVal = phone.value.trim();
+            const captchaCodeVal = captchaCode.value.trim();
+
+            if (!phoneVal) {
+                showTip(phoneTip, '请输入手机号');
+                phone.focus();
+                return;
+            }
+            if (!phoneReg.test(phoneVal)) {
+                showTip(phoneTip, '手机号格式错误（请输入11位有效手机号）');
+                phone.focus();
+                return;
+            }
+            if (!captchaCodeVal) {
+                showTip(captchaTip, '请输入图形验证码');
+                captchaCode.focus();
+                return;
+            }
+
+            setBtnLoading(sendBtn, true, '发送中...');
+
+            try {
+                const res = await fetch(`${LOGIN_API_BASE_URL}/sms/code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_number: phoneVal,
+                        captcha_id: captchaId,
+                        code: captchaCodeVal
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    showTip(smsTip, '短信发送成功，请注意查收', false);
+                    startCountDown(60);
+                } else {
+                    showTip(smsTip, data.info || '短信发送失败');
+                    getCaptcha();
+                }
+            } catch (err) {
+                console.error('发送短信失败：', err);
+                showTip(smsTip, '网络错误，短信发送失败');
+            } finally {
+                setBtnLoading(sendBtn, false, '发送验证码');
+            }
+        }
+
+      async function handleLogin() {
+    const phoneVal = phone.value.trim();
+    const usernameVal = username.value.trim();
+    const smsCodeVal = smsCode.value.trim();
+
+    hideAllTips();
+
+    // 验证逻辑（保留）
+    if (!usernameVal) {
+        showTip(usernameTip, '请输入用户名');
+        username.focus();
+        return;
+    }
+    if (!usernameReg.test(usernameVal)) {
+        showTip(usernameTip, '用户名格式错误（3-20位字母/数字/下划线）');
+        username.focus();
+        return;
+    }
+    if (!phoneVal) {
+        showTip(phoneTip, '请输入手机号');
+        phone.focus();
+        return;
+    }
+    if (!phoneReg.test(phoneVal)) {
+        showTip(phoneTip, '手机号格式错误');
+        phone.focus();
+        return;
+    }
+    if (!smsCodeVal) {
+        showTip(smsTip, '请输入6位短信验证码');
+        smsCode.focus();
+        return;
+    }
+    if (smsCodeVal.length !== 6) {
+        showTip(smsTip, '短信验证码必须为6位数字');
+        smsCode.focus();
+        return;
+    }
+
+    setBtnLoading(loginSubmitBtn, true, '登录中...');
+
+    try {
+        const res = await fetch(`${LOGIN_API_BASE_URL}/sms/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', // 保留，兼容后端响应头
+            body: JSON.stringify({
+                username: usernameVal,
+                phone_number: phoneVal,
+                verify_code: smsCodeVal
+            })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            // ========== 核心修改：前端强制更新Cookie ==========
+            // 1. 从接口响应体中提取session_id（关键！要求后端返回这个字段）
+            const loginSessionId = data.data?.session_id;
+            if (!loginSessionId) {
+                // 兜底：若后端未返回，生成UUID（保证逻辑不中断）
+                console.warn('接口未返回session_id，使用兜底UUID');
+                loginSessionId = generateUUID();
+            }
+
+            // 2. 强制写入Cookie，覆盖原有值（属性与后端保持一致）
+            setCookie(
+                'session_id',        // Cookie名称
+                loginSessionId,      // 接口返回的session_id
+                7,                   // 有效期7天
+                '/',                 // Path，确保全站可用
+                'Lax'                // SameSite，兼容跨域
+            );
+
+            // ========== 原有逻辑 ==========
+            addBannerMessage(`登录成功！欢迎 ${usernameVal}`, 'default');
+            hideLoginModal();
+
+            // 验证Cookie是否更新（调试用，可删除）
+            console.log('更新后的session_id：', getCookie('session_id'));
+
+            // 重新连接WS（此时会读取新的session_id）
+            connectWS();
+        } else {
+            showTip(smsTip, data.info || '短信验证码错误或已过期');
+        }
+    } catch (err) {
+        console.error('登录失败：', err);
+        showTip(smsTip, '网络错误，登录失败，请检查后端是否启动');
+    } finally {
+        setBtnLoading(loginSubmitBtn, false, '登录/注册');
+    }
+}
+
+        // 倒计时函数
+        function startCountDown(time = 60) {
+            countDown = time;
+            sendBtn.disabled = true;
+            sendBtn.innerText = `${countDown}s后重发`;
+            timer && clearInterval(timer);
+            timer = setInterval(() => {
+                countDown--;
+                if (countDown > 0) {
+                    sendBtn.innerText = `${countDown}s后重发`;
+                } else {
+                    clearInterval(timer);
+                    timer = null;
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = '发送验证码';
+                }
+            }, 1000);
+        }
+
+        // ========== 事件绑定 ==========
+        function bindAllEvents() {
+            // 按钮游戏事件
+            connectBtn.addEventListener('click', connectWS);
+            pressBtn.addEventListener('click', function() {
+                sendMessage(CMD.PRESS_BUTTON);
+                this.disabled = true;
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        this.disabled = false;
+                    }
+                }, 500);
+            });
+
+            // 登录弹窗事件
+            showLoginBtn.addEventListener('click', showLoginModal);
+            closeLogin.addEventListener('click', hideLoginModal);
+            loginMask.addEventListener('click', function(e) {
+                if (e.target === loginMask) {
+                    hideLoginModal();
+                }
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && loginModal.classList.contains('show')) {
+                    hideLoginModal();
+                }
+            });
+
+            // 登录表单清除按钮事件
+            clearPhone.onclick = () => { phone.value = ''; hideTip(phoneTip); };
+            clearCaptcha.onclick = () => { captchaCode.value = ''; hideTip(captchaTip); };
+            clearSms.onclick = () => { smsCode.value = ''; hideTip(smsTip); };
+            clearUsername.onclick = () => { username.value = ''; hideTip(usernameTip); };
+
+            // 图形验证码刷新
+            captchaImg.onclick = getCaptcha;
+
+            // 发送验证码
+            sendBtn.onclick = sendSmsCode;
+
+            // 登录提交
+            loginForm.onsubmit = function(e) {
+                e.preventDefault();
+                handleLogin();
+            };
+
+            // 输入框实时清除提示
+            const inputTipMap = {
+                phone: 'phoneTip',
+                username: 'usernameTip',
+                captchaCode: 'captchaTip',
+                smsCode: 'smsTip'
+            };
+            [phone, username, captchaCode, smsCode].forEach(input => {
+                input.oninput = function() {
+                    const tipId = inputTipMap[this.id];
+                    tipId && hideTip(document.getElementById(tipId));
+                };
+            });
+        }
+
+        // ========== 页面初始化 ==========
+        window.onload = function() {
+            getCaptcha(); // 初始化图形验证码
+            bindAllEvents(); // 绑定所有事件
+        };
+
+        // 页面卸载清理
+        window.onbeforeunload = function() {
+            if (ws) ws.close();
+            if (countdownTimer) clearInterval(countdownTimer);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            if (timer) clearInterval(timer);
+        };
+    </script>
+</body>
+</html>

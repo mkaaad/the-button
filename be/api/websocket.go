@@ -23,8 +23,8 @@ var upgrader = websocket.Upgrader{
 // WebSocketHandler handles WebSocket upgrade requests.
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
-	sessionID, err := c.Cookie("session_id")
-	if err != nil || sessionID == "" {
+	sessionID := c.Query("session_id")
+	if sessionID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"info": "未登录",
 		})

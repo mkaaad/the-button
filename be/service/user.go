@@ -11,41 +11,37 @@ import (
 	"github.com/google/uuid"
 )
 
-func RegisterOrLogin(c *gin.Context, userName string, phoneNumber string) error {
-	u, err := dao.FindUserByUsername(userName)
+func RegisterOrLogin(c *gin.Context, username string, phoneNumber string) (string, string, error) {
+	u, err := dao.FindUserByUsername(username)
 	if err != nil {
 		err = &errorx.DatabaseErr{}
-		return err
+		return "", "", err
 	}
-	if u.PhoneNumber != "" {
+	if u.PhoneNumber != phoneNumber {
 		err = &errorx.UsernameExistErr{}
-		return err
+		return "", "", err
 	}
 	u, err = dao.FindUserByPhoneNumber(phoneNumber)
 	if err != nil {
 		err = &errorx.DatabaseErr{}
-		return err
+		return "", "", err
 	}
-	if u.Username != "" {
-		return setSessionIDToCookie(c, u.Username)
+	if u.Username == "" {
+		u.PhoneNumber = phoneNumber
+		u.Username = username
+		err = dao.CreatUser(&u)
+		if err != nil {
+			err = &errorx.DatabaseErr{}
+			return "", "", err
+		}
+
 	}
-	u.PhoneNumber = phoneNumber
-	u.Username = userName
-	err = dao.CreatUser(&u)
-	if err != nil {
-		err = &errorx.DatabaseErr{}
-		return err
-	}
-	return setSessionIDToCookie(c, u.Username)
-}
-func setSessionIDToCookie(c *gin.Context, username string) error {
 	sessionID := uuid.New().String()
-	err := dao.Rdb.Set(context.Background(), sessionID, username, 24*time.Hour).Err()
+	err = dao.Rdb.Set(context.Background(), sessionID, username, 24*time.Hour).Err()
 	if err != nil {
-		return &errorx.DatabaseErr{}
+		return "", "", &errorx.DatabaseErr{}
 	}
-	c.SetCookie("session_id", sessionID, 60*60*24, "/", "", false, true)
-	return nil
+	return sessionID, username, nil
 }
 func IsLogin(sessionID string, send chan []byte) (string, bool) {
 	username, err := dao.Rdb.Get(context.Background(), sessionID).Result()
