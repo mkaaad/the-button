@@ -1,0 +1,91 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 42 60% 98%;
+    --foreground: 203 36% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 203 36% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 203 36% 14%;
+
+    --primary: 189 72% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 42 75% 92%;
+    --secondary-foreground: 203 36% 14%;
+
+    --muted: 38 44% 93%;
+    --muted-foreground: 203 18% 38%;
+
+    --accent: 22 88% 56%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 76% 57%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 33% 86%;
+    --input: 35 33% 86%;
+    --ring: 189 72% 36%;
+
+    --radius: 1rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    width: 32rem;
+    height: 32rem;
+    border-radius: 9999px;
+    filter: blur(80px);
+    z-index: -2;
+    pointer-events: none;
+  }
+
+  body::before {
+    top: -8rem;
+    left: -8rem;
+    background: rgba(7, 138, 157, 0.18);
+  }
+
+  body::after {
+    right: -9rem;
+    bottom: -10rem;
+    background: rgba(240, 124, 67, 0.2);
+  }
+}
+
+@layer utilities {
+  .mono-digits {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
