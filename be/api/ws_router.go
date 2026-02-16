@@ -12,13 +12,14 @@ const (
 )
 
 func handleMessage(msg []byte, sessionID string, send chan []byte, broadcast chan []byte) error {
-	if !service.IsWithinTime(send) {
-		return nil
-	}
 	switch string(msg) {
 	case GET_LEADEROARD:
+		// Leaderboard should always be queryable, even after game ends.
 		return service.GetLeaderboard(send)
 	case PRESS_BUTTON:
+		if !service.IsWithinTime(send) {
+			return nil
+		}
 		username, ok := service.IsLogin(sessionID, send)
 		if !ok {
 			return nil

@@ -3,6 +3,7 @@ package service
 import (
 	"button/dao"
 	"button/errorx"
+	"button/model"
 	"context"
 	"encoding/json"
 	"time"
@@ -17,19 +18,30 @@ func RegisterOrLogin(c *gin.Context, username string, phoneNumber string) (strin
 		err = &errorx.DatabaseErr{}
 		return "", "", err
 	}
-	if u.PhoneNumber != phoneNumber {
+	// Username exists and is bound to another phone number.
+	if u.Username != "" && u.PhoneNumber != phoneNumber {
 		err = &errorx.UsernameExistErr{}
 		return "", "", err
 	}
+
 	u, err = dao.FindUserByPhoneNumber(phoneNumber)
 	if err != nil {
 		err = &errorx.DatabaseErr{}
 		return "", "", err
 	}
+
+	// Phone number already exists but binds to another username.
+	if u.Username != "" && u.Username != username {
+		err = &errorx.UsernameExistErr{}
+		return "", "", err
+	}
+
 	if u.Username == "" {
-		u.PhoneNumber = phoneNumber
-		u.Username = username
-		err = dao.CreatUser(&u)
+		newUser := model.User{
+			PhoneNumber: phoneNumber,
+			Username:    username,
+		}
+		err = dao.CreatUser(&newUser)
 		if err != nil {
 			err = &errorx.DatabaseErr{}
 			return "", "", err

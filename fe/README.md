@@ -34,10 +34,16 @@ Frontend runs on `http://localhost:5173` by default.
 
 ## Backend URL
 
-Set API base URL with env var:
+Set API/WS base URL with env vars:
+
+```bash
+VITE_API_BASE_URL=/api
+VITE_WS_URL=/ws
+```
+
+For local Vite dev (no reverse proxy), you can set:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080/ws
 ```
-
-When omitted, it defaults to `http://localhost:8080`.

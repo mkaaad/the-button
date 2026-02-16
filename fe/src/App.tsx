@@ -79,10 +79,9 @@ const FEED_LIMIT = 6;
 const SESSION_ID_STORAGE_KEY = "the-button.session_id";
 const USERNAME_STORAGE_KEY = "the-button.username";
 const GUEST_SESSION_ID = "guest";
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(
-  /\/+$/,
-  "",
-);
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/+$/, "");
+const WS_BASE_URL = (import.meta.env.VITE_WS_URL ?? "/ws").trim();
+const BACKEND_FORCE_END_AT = "2026-02-16 23:59:59.999 (UTC+8, Asia/Shanghai)";
 
 let feedSequence = 0;
 
@@ -116,12 +115,25 @@ function clearStoredAuth() {
   window.localStorage.removeItem(USERNAME_STORAGE_KEY);
 }
 
-function toWsUrl(apiBaseUrl: string): string {
-  const normalized = /^https?:\/\//.test(apiBaseUrl) ? apiBaseUrl : `http://${apiBaseUrl}`;
+function toWsUrl(wsBaseUrl: string): string {
+  const normalized = wsBaseUrl.trim();
+  if (!normalized) return "ws://localhost:8080/ws";
+  if (/^wss?:\/\//.test(normalized)) return normalized;
+
+  if (normalized.startsWith("/")) {
+    if (typeof window !== "undefined") {
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProtocol}//${window.location.host}${normalized}`;
+    }
+    return `ws://localhost:8080${normalized}`;
+  }
+
+  const normalizedHttp = /^https?:\/\//.test(normalized) ? normalized : `http://${normalized}`;
   try {
-    const parsed = new URL(normalized);
+    const parsed = new URL(normalizedHttp);
     const wsProtocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-    return `${wsProtocol}//${parsed.host}/ws`;
+    const pathname = parsed.pathname === "/" ? "/ws" : parsed.pathname.replace(/\/+$/, "");
+    return `${wsProtocol}//${parsed.host}${pathname}`;
   } catch {
     return "ws://localhost:8080/ws";
   }
@@ -261,7 +273,7 @@ function App() {
   const [pressCooldownUntil, setPressCooldownUntil] = useState(0);
   const [ticker, setTicker] = useState(Date.now());
 
-  const wsUrl = useMemo(() => toWsUrl(API_BASE_URL), []);
+  const wsUrl = useMemo(() => toWsUrl(WS_BASE_URL), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTicker(Date.now()), 100);
@@ -382,6 +394,7 @@ function App() {
           break;
         }
         case "finished": {
+          setRemainingMs(0);
           toast.error("本轮活动已结束");
           break;
         }
@@ -653,10 +666,10 @@ function App() {
                 按钮挑战
               </p>
               <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-                实时反应竞技场
+                The Button
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground md:text-base">
-                先用短信完成登录，再进入 60 秒循环挑战。按下时机越精准，排行榜成绩越高。
+                先用短信登录，再进入 60 秒倒计时挑战。
               </p>
             </div>
 
@@ -689,18 +702,26 @@ function App() {
                   </Button>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary" className="rounded-full px-3 py-1">
-                  API {API_BASE_URL}
-                </Badge>
-                <Badge variant="outline" className="rounded-full px-3 py-1">
-                  WS {wsUrl}
-                </Badge>
-              </div>
             </div>
           </section>
 
           <section className="space-y-6">
+            <Card className="border-white/60 bg-white/90 backdrop-blur">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">游戏规则</CardTitle>
+                <CardDescription>The Button 规则以服务端判定为准。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>1. 点击按钮会刷新倒计时，倒计时窗口固定为 60 秒。</p>
+                <p>2. 排行榜按“倒计时值”升序排名，倒计时越小，排名越高。</p>
+                <p>3. 单个用户每次点击后有 5 秒冷却，冷却期间无法再次点击。</p>
+                <p>4. 倒计时归零后本轮游戏结束，服务端会返回 `finished` 状态。</p>
+                <p className="font-medium text-foreground">
+                  后端强制停止时间：{BACKEND_FORCE_END_AT}
+                </p>
+              </CardContent>
+            </Card>
+
             <Card className="animate-in fade-in slide-in-from-bottom-6 duration-700 border-white/60 bg-white/90 backdrop-blur">
               <CardHeader className="pb-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -710,7 +731,7 @@ function App() {
                       游戏面板
                     </CardTitle>
                     <CardDescription>
-                      每 5 秒可按一次按钮，间隔越小，排行榜成绩越高。
+                      点击会刷新倒计时；倒计时越小，排行榜越靠前。
                     </CardDescription>
                   </div>
                   <Badge
@@ -801,14 +822,14 @@ function App() {
                     <Trophy className="h-4 w-4 text-accent" />
                     排行榜
                   </CardTitle>
-                  <CardDescription>前 20 名（成绩越高越靠前）。</CardDescription>
+                  <CardDescription>前 20 名（倒计时越小越靠前）。</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-lg border border-border/70">
                     <div className="grid grid-cols-[70px_1fr_120px] items-center bg-muted/55 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <span>排名</span>
                       <span>玩家</span>
-                      <span className="text-right">间隔</span>
+                      <span className="text-right">倒计时</span>
                     </div>
                     <Separator />
                     <div className="max-h-[360px] overflow-auto">

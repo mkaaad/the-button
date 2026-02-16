@@ -1,0 +1,65 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: the-button-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    container_name: the-button-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      ACCESS_KEY_ID: ${ACCESS_KEY_ID:-}
+      ACCESS_KEY_SECRET: ${ACCESS_KEY_SECRET:-}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      GAME_START_TIME: ${GAME_START_TIME:-2026-02-16 20:00:00}
+      GAME_END_TIME: ${GAME_END_TIME:-2026-02-16 23:59:59.999}
+      GAME_TIMEZONE: ${GAME_TIMEZONE:-Asia/Shanghai}
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/sms/captcha || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./fe
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_WS_URL: /ws
+    container_name: the-button-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    networks:
+      - app-network
+
+volumes:
+  redis_data:
+
+networks:
+  app-network:
+    name: the-button-network
