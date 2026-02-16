@@ -1,9 +1,12 @@
 package api
 
 import (
+	"button/config"
 	"button/connx"
+	"button/service"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -23,12 +26,19 @@ var upgrader = websocket.Upgrader{
 // WebSocketHandler handles WebSocket upgrade requests.
 func WebSocketHandler(c *gin.Context) {
 	// Upgrade initial GET request to a websocket
-	username := c.GetString("username")
+	sessionID := c.Query("session_id")
+	if sessionID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"info": "未登录",
+		})
+		return
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	client := connx.NewClient(conn)
+	client := connx.NewClient(conn, sessionID)
 	// Register new client
 	connx.ConnPool.Add(client)
 	// Ensure connection is closed on function exit
@@ -46,7 +56,7 @@ func WebSocketHandler(c *gin.Context) {
 			continue // Ignore non-text messages
 		}
 		// Handle the message
-		err = handleMessage(message, username, client.Send, broadcast)
+		err = handleMessage(message, client.SessionID, client.Send, broadcast)
 		if err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("wrong message format"))
 			log.Println("Error handling message:", err)
@@ -54,6 +64,7 @@ func WebSocketHandler(c *gin.Context) {
 	}
 }
 func BroadCastMessage() {
+	go checkTimeCron()
 	for msg := range broadcast {
 		conns := connx.ConnPool.GetAllConn()
 		for _, c := range conns {
@@ -62,6 +73,15 @@ func BroadCastMessage() {
 			default:
 				go connx.ConnPool.Del(c)
 			}
+		}
+	}
+}
+func checkTimeCron() {
+	t := time.NewTicker(200 * time.Millisecond)
+	for range t.C {
+		if time.Now().After(config.StartTime) {
+			service.GetTime(broadcast)
+			break
 		}
 	}
 }

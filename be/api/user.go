@@ -73,7 +73,7 @@ func VerifyCode(c *gin.Context) {
 		})
 		return
 	}
-	err = service.RegisterOrLogin(c, u.Username, u.PhoneNumber)
+	sessionID, username, err := service.RegisterOrLogin(c, u.Username, u.PhoneNumber)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"info": err.Error(),
@@ -82,6 +82,10 @@ func VerifyCode(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"info": "登录成功",
+		"data": gin.H{
+			"session_id": sessionID,
+			"username":   username,
+		},
 	})
 }
 func GetCaptcha(c *gin.Context) {

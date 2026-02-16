@@ -131,6 +131,7 @@ func GetTime(send chan []byte) error {
 }
 func IsLocked(username string, send chan []byte) bool {
 	ctx := context.Background()
+
 	count, err := dao.Rdb.Incr(ctx, username).Result()
 	if err != nil {
 		return true
