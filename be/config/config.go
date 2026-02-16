@@ -33,7 +33,8 @@ func InitConfig() {
 	RedisDB, _ = strconv.Atoi(redisDB)
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
-		panic("failed ti init time location")
+		// Fallback to UTC+8 when tzdata is unavailable in runtime.
+		loc = time.FixedZone("CST", 8*3600)
 	}
 	StartTime = time.Date(2026, 2, 16, 20, 0, 0, 0, loc)
 	EndTime = time.Date(2026, 2, 16, 23, 59, 59, 999, loc)

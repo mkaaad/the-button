@@ -11,7 +11,8 @@ FROM alpine:latest
 
 WORKDIR /app
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates tzdata
+ENV TZ=Asia/Shanghai
 
 COPY --from=builder /app/the-button .
 

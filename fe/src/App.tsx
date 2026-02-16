@@ -6,7 +6,6 @@ import {
   KeyRound,
   LogIn,
   LogOut,
-  RefreshCw,
   SendHorizonal,
   ShieldCheck,
   Signal,
@@ -67,6 +66,7 @@ type FeedItem = {
 type ConnectOptions = {
   silent?: boolean;
   fromRestore?: boolean;
+  sessionId?: string;
 };
 
 const PHONE_REGEX = /^1[3-9]\d{9}$/;
@@ -76,7 +76,9 @@ const COUNTDOWN_TOTAL_MS = 60_000;
 const SMS_COOLDOWN_SECONDS = 60;
 const PRESS_LOCK_MS = 5_000;
 const FEED_LIMIT = 6;
+const SESSION_ID_STORAGE_KEY = "the-button.session_id";
 const USERNAME_STORAGE_KEY = "the-button.username";
+const GUEST_SESSION_ID = "guest";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(
   /\/+$/,
   "",
@@ -84,9 +86,21 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:808
 
 let feedSequence = 0;
 
+function getStoredSessionId(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(SESSION_ID_STORAGE_KEY)?.trim() ?? "";
+}
+
 function getStoredUsername(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem(USERNAME_STORAGE_KEY)?.trim() ?? "";
+}
+
+function setStoredSessionId(sessionId: string) {
+  if (typeof window === "undefined") return;
+  const normalized = sessionId.trim();
+  if (!normalized) return;
+  window.localStorage.setItem(SESSION_ID_STORAGE_KEY, normalized);
 }
 
 function setStoredUsername(username: string) {
@@ -96,8 +110,9 @@ function setStoredUsername(username: string) {
   window.localStorage.setItem(USERNAME_STORAGE_KEY, normalized);
 }
 
-function clearStoredUsername() {
+function clearStoredAuth() {
   if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SESSION_ID_STORAGE_KEY);
   window.localStorage.removeItem(USERNAME_STORAGE_KEY);
 }
 
@@ -109,6 +124,17 @@ function toWsUrl(apiBaseUrl: string): string {
     return `${wsProtocol}//${parsed.host}/ws`;
   } catch {
     return "ws://localhost:8080/ws";
+  }
+}
+
+function buildWsConnectUrl(baseWsUrl: string, sessionId: string): string {
+  const normalized = sessionId.trim() || GUEST_SESSION_ID;
+  try {
+    const url = new URL(baseWsUrl);
+    url.searchParams.set("session_id", normalized);
+    return url.toString();
+  } catch {
+    return `${baseWsUrl}?session_id=${encodeURIComponent(normalized)}`;
   }
 }
 
@@ -132,6 +158,18 @@ function readCaptchaData(data: unknown): { captchaId: string; imageBase64: strin
     return null;
   }
   return { captchaId: maybeData.captcha_id, imageBase64: maybeData.image_base64 };
+}
+
+function readLoginData(data: unknown): { sessionId: string; username: string } | null {
+  if (!data || typeof data !== "object") return null;
+  const maybeData = data as { session_id?: unknown; username?: unknown };
+  if (typeof maybeData.session_id !== "string" || typeof maybeData.username !== "string") {
+    return null;
+  }
+  const sessionId = maybeData.session_id.trim();
+  const username = maybeData.username.trim();
+  if (!sessionId || !username) return null;
+  return { sessionId, username };
 }
 
 function parseWsEnvelope(raw: string): WsEnvelope | null {
@@ -196,6 +234,7 @@ function formatScoreTime(timeMs: number): string {
 function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const restoreTriedRef = useRef(false);
+  const initialSessionIdRef = useRef<string>(getStoredSessionId());
   const initialUsernameRef = useRef<string>(getStoredUsername());
 
   const [phone, setPhone] = useState("");
@@ -212,7 +251,8 @@ function App() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
 
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(initialUsernameRef.current.length > 0);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(initialSessionIdRef.current.length > 0);
+  const [sessionId, setSessionId] = useState<string>(initialSessionIdRef.current);
   const [currentUser, setCurrentUser] = useState<string>(initialUsernameRef.current);
   const [serverAnchorMs, setServerAnchorMs] = useState<number | null>(null);
   const [remainingMs, setRemainingMs] = useState(COUNTDOWN_TOTAL_MS);
@@ -345,6 +385,14 @@ function App() {
           toast.error("本轮活动已结束");
           break;
         }
+        case "unauthorized": {
+          setIsLoggedIn(false);
+          setSessionId("");
+          setCurrentUser("");
+          clearStoredAuth();
+          toast.error("请先登录后再按按钮");
+          break;
+        }
         default:
           break;
       }
@@ -358,27 +406,32 @@ function App() {
 
       const silent = options?.silent ?? false;
       const fromRestore = options?.fromRestore ?? false;
+      const connectSessionId =
+        (options?.sessionId ?? (fromRestore ? initialSessionIdRef.current : sessionId)).trim() ||
+        GUEST_SESSION_ID;
       let opened = false;
 
       wsRef.current?.close();
       setConnectionState("connecting");
 
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(buildWsConnectUrl(wsUrl, connectSessionId));
       wsRef.current = ws;
 
       ws.onopen = () => {
         opened = true;
         setConnectionState("connected");
-        setCurrentUser((name) => {
-          const resolved = name.trim();
-          if (resolved) {
-            setStoredUsername(resolved);
-            setIsLoggedIn(true);
-            return resolved;
-          }
+        if (connectSessionId === GUEST_SESSION_ID) {
           setIsLoggedIn(false);
-          return "";
-        });
+          setSessionId("");
+          setCurrentUser("");
+        } else {
+          setIsLoggedIn(true);
+          setSessionId(connectSessionId);
+          setStoredSessionId(connectSessionId);
+          if (currentUser.trim()) {
+            setStoredUsername(currentUser);
+          }
+        }
         if (!silent) {
           pushFeed("已连接到游戏服务器");
           toast.success("连接成功");
@@ -405,8 +458,9 @@ function App() {
 
         if (fromRestore && !opened) {
           setIsLoggedIn(false);
+          setSessionId("");
           setCurrentUser("");
-          clearStoredUsername();
+          clearStoredAuth();
           return;
         }
 
@@ -415,15 +469,16 @@ function App() {
         }
       };
     },
-    [connectionState, handleWsMessage, pushFeed, requestSnapshot, wsUrl],
+    [connectionState, currentUser, handleWsMessage, pushFeed, requestSnapshot, sessionId, wsUrl],
   );
 
   useEffect(() => {
     if (restoreTriedRef.current) return;
     restoreTriedRef.current = true;
-
-    if (!initialUsernameRef.current) return;
-    connectWs({ silent: true, fromRestore: true });
+    connectWs({
+      silent: true,
+      fromRestore: Boolean(initialSessionIdRef.current),
+    });
   }, [connectWs]);
 
   const disconnectWs = useCallback(() => {
@@ -436,15 +491,17 @@ function App() {
   const handleLogout = useCallback(() => {
     disconnectWs();
     setIsLoggedIn(false);
+    setSessionId("");
     setCurrentUser("");
     setPhone("");
     setUsername("");
     setSmsCode("");
     setCaptchaInput("");
     setLoginModalOpen(false);
-    clearStoredUsername();
+    clearStoredAuth();
     toast.success("已退出登录");
-  }, [disconnectWs]);
+    connectWs({ silent: true, sessionId: GUEST_SESSION_ID });
+  }, [connectWs, disconnectWs]);
 
   const handleSendSms = useCallback(async () => {
     const normalizedPhone = phone.trim();
@@ -528,13 +585,19 @@ function App() {
       if (!response.ok) {
         throw new Error(readInfo(payload, "登录失败"));
       }
+      const loginData = readLoginData(payload.data);
+      if (!loginData) {
+        throw new Error("登录返回数据异常");
+      }
 
-      setCurrentUser(normalizedUsername);
-      setStoredUsername(normalizedUsername);
+      setSessionId(loginData.sessionId);
+      setStoredSessionId(loginData.sessionId);
+      setCurrentUser(loginData.username);
+      setStoredUsername(loginData.username);
       setIsLoggedIn(true);
       setLoginModalOpen(false);
       toast.success(readInfo(payload, "登录成功"));
-      connectWs();
+      connectWs({ sessionId: loginData.sessionId });
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败";
       toast.error(message);
@@ -546,6 +609,10 @@ function App() {
   const handlePressButton = useCallback(() => {
     if (connectionState !== "connected") {
       toast.error("请先连接 WebSocket");
+      return;
+    }
+    if (!isLoggedIn) {
+      toast.error("请先登录后再按按钮");
       return;
     }
     if (remainingMs <= 0) {
@@ -561,7 +628,7 @@ function App() {
       return;
     }
     setPressCooldownUntil(Date.now() + PRESS_LOCK_MS);
-  }, [connectionState, localLockMs, remainingMs, sendWs]);
+  }, [connectionState, isLoggedIn, localLockMs, remainingMs, sendWs]);
 
   const connectionInfo =
     connectionState === "connected"
@@ -572,7 +639,8 @@ function App() {
           ? "已断开"
           : "未连接";
 
-  const canPress = connectionState === "connected" && remainingMs > 0 && localLockMs <= 0;
+  const canPress =
+    connectionState === "connected" && isLoggedIn && remainingMs > 0 && localLockMs <= 0;
 
   return (
     <>
@@ -660,38 +728,6 @@ function App() {
               </CardHeader>
 
               <CardContent className="space-y-6">
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => connectWs()}
-                    disabled={connectionState === "connecting" || !isLoggedIn}
-                    className="gap-2"
-                  >
-                    <Wifi className="h-4 w-4" />
-                    连接
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={disconnectWs}
-                    disabled={connectionState !== "connected"}
-                    className="gap-2"
-                  >
-                    <WifiOff className="h-4 w-4" />
-                    断开
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={requestSnapshot}
-                    disabled={connectionState !== "connected"}
-                    className="gap-2"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    刷新
-                  </Button>
-                </div>
-
                 <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/40 p-4 sm:grid-cols-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">剩余时间</p>
@@ -703,7 +739,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">会话状态</p>
-                    <p className="mt-1 text-2xl font-bold">{isLoggedIn ? currentUser || "已登录" : "游客"}</p>
+                    <p className="mt-1 text-2xl font-bold">{isLoggedIn ? currentUser : "游客"}</p>
                   </div>
                   <div className="sm:col-span-3">
                     <Progress value={progressValue} className="h-2.5" />
@@ -807,7 +843,7 @@ function App() {
               登录验证
             </DialogTitle>
             <DialogDescription>
-              完成图形验证码与短信验证后，WebSocket 会复用当前会话 Cookie。
+              完成短信验证后会获取 `session_id`，随后通过 ws query 参数进行身份标识。
             </DialogDescription>
           </DialogHeader>
 
