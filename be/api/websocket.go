@@ -1,9 +1,12 @@
 package api
 
 import (
+	"button/config"
 	"button/connx"
+	"button/service"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -61,6 +64,7 @@ func WebSocketHandler(c *gin.Context) {
 	}
 }
 func BroadCastMessage() {
+	go checkTimeCron()
 	for msg := range broadcast {
 		conns := connx.ConnPool.GetAllConn()
 		for _, c := range conns {
@@ -69,6 +73,15 @@ func BroadCastMessage() {
 			default:
 				go connx.ConnPool.Del(c)
 			}
+		}
+	}
+}
+func checkTimeCron() {
+	t := time.NewTicker(200 * time.Millisecond)
+	for range t.C {
+		if time.Now().After(config.StartTime) {
+			service.GetTime(broadcast)
+			break
 		}
 	}
 }

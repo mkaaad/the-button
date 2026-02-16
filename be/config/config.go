@@ -14,8 +14,8 @@ var (
 	RedisAddr       string
 	RedisPassword   string
 	RedisDB         int
-	StartTime       time.Time = time.Now()
-	EndTime         time.Time = time.Now().Add(24 * time.Hour)
+	StartTime       time.Time
+	EndTime         time.Time
 )
 
 func InitConfig() {
@@ -31,4 +31,11 @@ func InitConfig() {
 	}
 	AccessKeyID, AccessKeySecret, RedisAddr, RedisPassword = accessKeyID, accessKeySecret, redisAddr, redisPassword
 	RedisDB, _ = strconv.Atoi(redisDB)
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		panic("failed ti init time location")
+	}
+	StartTime = time.Date(2026, 2, 16, 20, 0, 0, 0, loc)
+	EndTime = time.Date(2026, 2, 16, 23, 59, 59, 999, loc)
+
 }

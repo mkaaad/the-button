@@ -12,6 +12,9 @@ const (
 )
 
 func handleMessage(msg []byte, sessionID string, send chan []byte, broadcast chan []byte) error {
+	if !service.IsWithinTime(send) {
+		return nil
+	}
 	switch string(msg) {
 	case GET_LEADEROARD:
 		return service.GetLeaderboard(send)
@@ -20,14 +23,15 @@ func handleMessage(msg []byte, sessionID string, send chan []byte, broadcast cha
 		if !ok {
 			return nil
 		}
-		if !service.IsWithinTime(send) {
-			return nil
-		}
 		if service.IsLocked(username, send) {
 			return nil
 		}
 		return service.PressButton(username, broadcast)
 	case GET_TIME:
+		if !service.IsWithinTime(send) {
+			return nil
+		}
+
 		return service.GetTime(send)
 	default:
 		return errors.New("parse msg error")
